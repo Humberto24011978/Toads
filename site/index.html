@@ -61,8 +61,8 @@
   .leaflet-control-layers { border-radius: 10px !important; }
   .avenir { background: #fff7e8; border: 1px solid #f0d9a8; border-radius: 12px; padding: 10px 12px; margin-bottom: 14px; }
   .avenir h3 { margin: 0 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: .5px; color: #8a5a12; }
-  .avenir button { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 4px 0; font-size: 13.5px; color: var(--encre); cursor: pointer; line-height: 1.4; }
-  .avenir button:hover { text-decoration: underline; }
+  .avenir .ligne { margin: 3px 0 0; font-size: 13.5px; line-height: 1.45; }
+  .avenir a { color: var(--encre); text-decoration: underline; text-decoration-color: #d9b46a; text-underline-offset: 2px; }
   .jours { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; margin-bottom: 6px; }
   .jours button { border: 1px solid var(--ligne); background: #fff; border-radius: 9px; padding: 5px 0 4px; cursor: pointer; display: flex; flex-direction: column;
     align-items: center; gap: 3px; font-size: 11px; color: var(--gris); min-width: 0; }
@@ -238,21 +238,25 @@ const prevEspece = (esp) => info.previsions && info.previsions.especes[esp];
 function afficherAvenir() {
   const zone = document.getElementById("avenir");
   if (!info.previsions) { zone.hidden = true; return; }
-  const dates = info.previsions.dates, lignes = [];
+  const dates = info.previsions.dates, maintenant = [], avenir = [];
   for (const [cle, p] of Object.entries(info.previsions.especes)) {
     const v = p.zone, max = Math.max(...v.slice(1)), k = v.indexOf(max, 1);
     const nom = info.especes[cle] ? info.especes[cle].nom : cle;
-    if (v[0] >= 60) lignes.push({ cle, k: 0, force: v[0], txt: `<b>${nom}</b> : bon moment dès maintenant` });
+    if (v[0] >= 60) maintenant.push({ cle, nom, force: v[0] });
     else if (max >= 60 && max - v[0] >= 20) {
       const quand = k === 1 ? "dès demain" : "vers " + new Date(dates[k] + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric" });
-      lignes.push({ cle, k, force: max, txt: `<b>${nom}</b> : poussée ${max >= 75 ? "forte " : ""}probable ${quand}${k >= 4 ? " (tendance)" : ""}` });
+      avenir.push({ cle, k, force: max, txt: `<b>${nom}</b> : poussée ${max >= 75 ? "forte " : ""}probable ${quand}${k >= 4 ? " (tendance)" : ""}` });
     }
   }
-  if (!lignes.length) { zone.hidden = true; return; }
-  lignes.sort((a, b) => b.force - a.force);
-  zone.innerHTML = `<h3>À venir ${info.previsions.zone.nom} (${info.previsions.zone.rayon_km} km)</h3>` +
-    lignes.slice(0, 5).map((l) => `<button data-e="${l.cle}" data-k="${l.k}">${l.txt}</button>`).join("");
-  zone.querySelectorAll("button").forEach((b) => b.onclick = () => { espece = b.dataset.e; mode = "jour"; jourSel = +b.dataset.k; enregistrer(); afficher(); });
+  maintenant.sort((a, b) => b.force - a.force);
+  avenir.sort((a, b) => b.force - a.force);
+  const lien = (cle, k, txt) => `<a href="#" data-e="${cle}" data-k="${k}">${txt}</a>`;
+  let html = `<h3>${info.previsions.zone.nom} (${info.previsions.zone.rayon_km} km)</h3>`;
+  html += `<p class="ligne"><b>En ce moment</b> : ${maintenant.length ? maintenant.map((x) => lien(x.cle, 0, x.nom.toLowerCase())).join(", ") : "rien de très favorable"}.</p>`;
+  html += avenir.length ? avenir.slice(0, 4).map((x) => `<p class="ligne">${lien(x.cle, x.k, x.txt)}</p>`).join("")
+                        : `<p class="ligne">Pas de nouvelle poussée annoncée dans les 7 jours.</p>`;
+  zone.innerHTML = html;
+  zone.querySelectorAll("a").forEach((a) => a.onclick = (ev) => { ev.preventDefault(); espece = a.dataset.e; mode = "jour"; jourSel = +a.dataset.k; enregistrer(); afficher(); });
   zone.hidden = false;
 }
 
