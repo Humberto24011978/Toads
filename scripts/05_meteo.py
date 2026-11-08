@@ -45,13 +45,13 @@ def meteo():
     lons, lats = points_meteo()
     pts = [(lo, la) for la in lats for lo in lons]
     pluie, tmoy, tmin, tsol, alt = [], [], [], [], []
-    for i in range(0, len(pts), 50):
-        lot = pts[i:i + 50]
+    for i in range(0, len(pts), 100):
+        lot = pts[i:i + 100]
         data = get(API, {
             "longitude": ",".join(f"{p[0]:.3f}" for p in lot),
             "latitude": ",".join(f"{p[1]:.3f}" for p in lot),
-            "daily": "precipitation_sum,temperature_2m_mean,temperature_2m_min",
-            "hourly": "soil_temperature_6cm",
+            # Même variable de sol que les archives utilisées pour l'apprentissage (06_phenologie.py)
+            "daily": "precipitation_sum,temperature_2m_mean,temperature_2m_min,soil_temperature_0_to_7cm_mean",
             "past_days": JOURS_PASSES, "forecast_days": 1, "timezone": "Europe/Paris",
         }).json()
         data = data if isinstance(data, list) else [data]
@@ -60,9 +60,7 @@ def meteo():
             pluie.append(np.array(j["precipitation_sum"], dtype=float))
             tmoy.append(np.array(j["temperature_2m_mean"], dtype=float))
             tmin.append(np.array(j["temperature_2m_min"], dtype=float))
-            horaire = np.array(d["hourly"]["soil_temperature_6cm"], dtype=float)
-            with np.errstate(invalid="ignore"):
-                tsol.append(np.nanmean(horaire[:len(horaire) // 24 * 24].reshape(-1, 24), axis=1))
+            tsol.append(np.array(j["soil_temperature_0_to_7cm_mean"], dtype=float))
             alt.append(float(d.get("elevation") or 0))
     return {"pluie": np.array(pluie), "tmoy": np.array(tmoy), "tmin": np.array(tmin), "tsol": np.array(tsol),
             "alt": np.array(alt), "forme": (len(lats), len(lons))}

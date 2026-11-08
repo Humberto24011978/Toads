@@ -9,6 +9,11 @@ Principe, pour chaque espèce :
 
 Toutes les séries sont quotidiennes, du plus ancien au plus récent ; la dernière colonne est aujourd'hui.
 """
+import copy
+import json
+import warnings
+from pathlib import Path
+
 import numpy as np
 
 PARAMS = {
@@ -47,7 +52,8 @@ def dans(v, lo, hi, marge):
 
 
 def moyenne(a, axis=1):
-    with np.errstate(invalid="ignore"):
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
         m = np.nanmean(a, axis=axis)
     return np.where(np.isnan(m), 0, m)
 
@@ -75,7 +81,8 @@ def indice(espece, pluie, tsol, tmin, mois):
         meilleur = np.maximum(meilleur, r * w * f_t)
     t_actuel = moyenne(tsol[:, -3:])
     f_actuel = dans(t_actuel, p["tsol_actuel"], 40, 2)
-    with np.errstate(invalid="ignore"):
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", category=RuntimeWarning)
         gel = np.nanmin(tmin[:, -4:-1], axis=1) < GEL
     f_gel = np.where(gel, p["gel"], 1)
     return f_saison * meilleur * f_actuel * f_gel
@@ -92,3 +99,24 @@ def jours_depuis_bonne_pluie(pluie):
         if len(idx):
             jours[i] = passe.shape[1] - idx[-1]
     return jours
+
+
+PARAMS_DEFAUT = copy.deepcopy(PARAMS)
+
+
+def charger_reglages(chemin=None):
+    """Applique les réglages appris sur les observations (data/phenologie.json), quand ils sont retenus."""
+    chemin = Path(chemin) if chemin else Path(__file__).resolve().parent.parent / "data" / "phenologie.json"
+    if not chemin.exists():
+        return {}
+    especes = json.loads(chemin.read_text(encoding="utf-8")).get("especes", {})
+    for e, r in especes.items():
+        if e not in PARAMS:
+            continue
+        PARAMS[e] = dict(PARAMS_DEFAUT[e])
+        if r.get("retenu"):
+            PARAMS[e].update(delai=tuple(r["delai"]), tsol=tuple(r["tsol"]))
+    return especes
+
+
+charger_reglages()
