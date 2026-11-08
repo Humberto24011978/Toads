@@ -2,7 +2,7 @@
 
 Source : Open-Meteo (gratuit, sans clé) : pluie, température de l'air et du sol sur 30 jours.
 L'indice de chaque espèce (voir indice_meteo.py) est calculé à plusieurs altitudes,
-puis chaque carré de 250 m prend la valeur de son altitude. Il multiplie le score de potentiel.
+puis chaque carré de 100 m prend la valeur de son altitude. Il multiplie le score de potentiel.
 
 Résultats :
 - site/cartes/<espece>_jour.png : la carte du jour
@@ -72,7 +72,7 @@ def meteo():
 
 
 def vers_grille(valeurs, forme):
-    """Interpole un champ météo (grille en degrés) sur la grille Lambert-93 de 250 m."""
+    """Interpole un champ météo (grille en degrés) sur la grille Lambert-93 de 100 m."""
     lons, lats = points_meteo()
     src = valeurs.reshape(forme).astype("float32")
     t = from_origin(lons[0] - PAS_METEO[0] / 2, lats[0] + PAS_METEO[1] / 2, *PAS_METEO)
@@ -96,7 +96,7 @@ def series_jour(m, k):
 
 
 def indice_grille(espece, m, k, mois, interp):
-    """Indice du jour k sur la grille de 250 m, en tenant compte de l'altitude de chaque carré."""
+    """Indice du jour k sur la grille de 100 m, en tenant compte de l'altitude de chaque carré."""
     pluie, tsol, tmin = series_jour(m, k)
     niveaux = []
     for z in NIVEAUX:
@@ -108,15 +108,17 @@ def indice_grille(espece, m, k, mois, interp):
     return np.clip(niveaux[bas, lig, col] * (1 - f) + niveaux[haut, lig, col] * f, 0, 1)
 
 
-# Palette : jaune pâle -> orange -> rouge -> prune ; transparent sous le seuil
-PALETTE = [(12, (246, 226, 122, 120)), (40, (244, 163, 64, 170)), (70, (217, 69, 43, 205)), (100, (110, 26, 70, 230))]
-SEUIL = 12
+# Palette sur 1000 : jaune pâle -> orange -> rouge -> prune ; transparent sous le seuil
+PALETTE = [(80, (246, 226, 122, 115)), (200, (244, 163, 64, 165)), (400, (217, 69, 43, 200)),
+           (650, (130, 30, 75, 225)), (1000, (70, 10, 45, 240))]
+SEUIL = 80
+MAX = 1000
 
 
 def table_couleurs():
-    lut = np.zeros((256, 4), dtype=np.uint8)
-    for v in range(SEUIL, 256):
-        x = min(v, 100)
+    lut = np.zeros((MAX + 1, 4), dtype=np.uint8)
+    for v in range(SEUIL, MAX + 1):
+        x = v
         for (a, ca), (b, cb) in zip(PALETTE[:-1], PALETTE[1:]):
             if a <= x <= b:
                 t = (x - a) / (b - a)
@@ -128,7 +130,7 @@ def table_couleurs():
 def preparer_mercator():
     """Grille Web Mercator (celle des cartes en ligne) couvrant la zone."""
     t, w, h = calculate_default_transform(CRS, "EPSG:3857", COLS, LIGNES, left=X0, bottom=Y0, right=X1, top=Y1,
-                                          resolution=340)
+                                          resolution=150)
     gauche, haut = t.c, t.f
     droite, bas = gauche + w * t.a, haut + h * t.e
     ouest, sud, est, nord = transform_bounds("EPSG:3857", "EPSG:4326", gauche, bas, droite, haut)
@@ -139,11 +141,11 @@ def image(grille, t, w, h, lut, chemin):
     dst = np.zeros((h, w), dtype="float32")
     reproject(grille.astype("float32"), dst, src_transform=TRANSFORM, src_crs=CRS, src_nodata=0,
               dst_transform=t, dst_crs="EPSG:3857", dst_nodata=0, resampling=Resampling.bilinear)
-    Image.fromarray(lut[np.clip(np.rint(dst), 0, 255).astype(np.uint8)], "RGBA").save(chemin, optimize=True)
+    Image.fromarray(lut[np.clip(np.rint(dst), 0, MAX).astype(np.int32)], "RGBA").save(chemin, optimize=True)
 
 
-def secteurs(grille, seuil, rayon=3):
-    """Meilleurs secteurs d'une carte : moyenne sur 750 m, puis un seul point par voisinage de ~1,75 km.
+def secteurs(grille, seuil, rayon=6):
+    """Meilleurs secteurs d'une carte : moyenne sur 300 m, puis un seul point par voisinage de ~1,2 km.
 
     Renvoie [[lat, lon, score], ...] du meilleur au moins bon.
     """
@@ -190,9 +192,9 @@ def lune(jour):
 def statut(valeur, f_saison):
     if f_saison == 0:
         return "hors saison"
-    if valeur >= 0.5:
+    if valeur >= 0.3:
         return "bon moment"
-    if valeur >= 0.25:
+    if valeur >= 0.12:
         return "conditions moyennes"
     return "peu probable en ce moment"
 
@@ -212,7 +214,7 @@ def masque_zone(masque):
 
 def niveau(ind_grille, potentiel, zone):
     """Indice des meilleurs secteurs d'une zone (90e centile parmi les carrés à bon potentiel)."""
-    bons = zone & (potentiel >= 50)
+    bons = zone & (potentiel >= 500)
     valeurs = ind_grille[bons] if bons.sum() >= 20 else ind_grille[zone]
     return float(np.mean(valeurs)), float(np.percentile(valeurs, 90))
 
@@ -247,21 +249,21 @@ def main():
             continue
         potentiel = scores[espece]
         image(potentiel, t, w, h, lut, sortie / f"{espece}_potentiel.png")
-        ecrire_json(sortie / f"secteurs_{espece}_potentiel.json", secteurs(potentiel, 35))
+        ecrire_json(sortie / f"secteurs_{espece}_potentiel.json", secteurs(potentiel, 400))
         prev = {"zone": [], "region": [], "statut": []}
         for k, jour_k in enumerate(dates):
             ind_grille = indice_grille(espece, m, k, jour_k.month, interp)
-            carte = potentiel.astype("float32") * ind_grille
+            carte = potentiel.astype("float32") * ind_grille        # sur 1000
             image(carte, t, w, h, lut, sortie / f"{espece}_j{k}.png")
-            ecrire_json(sortie / f"secteurs_{espece}_j{k}.json", secteurs(carte, 15))
+            ecrire_json(sortie / f"secteurs_{espece}_j{k}.json", secteurs(carte, 120))
             moy_r, p90_r = niveau(ind_grille, potentiel, masque)
             _, p90_z = niveau(ind_grille, potentiel, zone)
             f_saison = im.SAISON[espece].get(jour_k.month, 0)
-            prev["zone"].append(round(p90_z * 100))
-            prev["region"].append(round(p90_r * 100))
+            prev["zone"].append(round(p90_z * 1000))
+            prev["region"].append(round(p90_r * 1000))
             prev["statut"].append(statut(p90_r, f_saison))
             if k == 0:
-                infos[espece] = {"nom": nom, "indice": round(moy_r * 100), "indice_meilleur": round(p90_r * 100),
+                infos[espece] = {"nom": nom, "indice": round(moy_r * 1000), "indice_meilleur": round(p90_r * 1000),
                                  "statut": statut(p90_r, f_saison), "saison": f_saison > 0}
                 for n, (e, (lc, cc)) in enumerate(controles, start=1):
                     if e == espece and 0 <= lc < LIGNES and 0 <= cc < COLS:

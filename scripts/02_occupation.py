@@ -1,7 +1,7 @@
 """Étape 2 : départements, forêts (BD Forêt v2) et occupation du sol (Corine Land Cover 2018).
 
 Source : service WFS public de la Géoplateforme IGN, sans clé.
-Les polygones sont rasterisés à 50 m, puis résumés en proportions par carré de 250 m.
+Les polygones sont rasterisés à 25 m, puis résumés en proportions par carré de 100 m.
 
 Résultat : data/occupation.tif (une bande par catégorie, en % du carré)
 """
@@ -138,13 +138,13 @@ def rasteriser(gdf, valeurs, fin=True, dtype="uint8"):
 
 
 def proportion(masque_fin):
-    """Part (0 à 1) des pixels de 50 m vrais dans chaque carré de 250 m."""
+    """Part (0 à 1) des pixels de 25 m vrais dans chaque carré de 100 m."""
     m = masque_fin.reshape(LIGNES, FIN, COLS, FIN)
     return m.mean(axis=(1, 3))
 
 
 def calculer(dep, foret, clc):
-    """Transforme les polygones en proportions par carré de 250 m."""
+    """Transforme les polygones en proportions par carré de 100 m."""
     bandes = {}
     masque = rasteriser(dep, np.ones(len(dep)), fin=False) > 0
     bandes["masque"] = masque * 100
@@ -164,10 +164,10 @@ def calculer(dep, foret, clc):
     for nom, liste in GROUPES_CLC.items():
         bandes[nom] = proportion(np.isin(r_clc, [int(c) for c in liste])) * 100
 
-    # Lisières : milieux ouverts herbacés en contact avec la forêt (à 50 m près)
+    # Lisières : bande de 50 m de part et d'autre du contact entre forêt et milieu ouvert herbacé
     ouvert = np.isin(r_clc, [231, 321, 243, 324, 322]) & ~est_foret
-    pres_foret = ndimage.binary_dilation(est_foret, iterations=1)
-    pres_ouvert = ndimage.binary_dilation(ouvert, iterations=1)
+    pres_foret = ndimage.binary_dilation(est_foret, iterations=2)
+    pres_ouvert = ndimage.binary_dilation(ouvert, iterations=2)
     lisiere = (ouvert & pres_foret) | (est_foret & pres_ouvert)
     bandes["lisiere"] = proportion(lisiere) * 100
 

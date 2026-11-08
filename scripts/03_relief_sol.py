@@ -4,7 +4,7 @@ Sources gratuites, sans clé :
 - altitude : modèle numérique Copernicus GLO-30 (30 m), hébergé en accès libre sur AWS ;
 - pH du sol (0-5 cm) : SoilGrids (ISRIC), maille de 250 m.
 
-Résultat : data/relief_sol.tif
+Résultat : data/relief_sol.tif (altitude, pente, exposition, creux/crêtes, pH), carrés de 100 m
 """
 import os
 
@@ -80,13 +80,22 @@ def ph_sol():
     return ph
 
 
+def position_topographique(alt, rayon_m=300):
+    """Altitude du carré moins l'altitude moyenne alentour : négatif = creux, vallon ; positif = crête, butte."""
+    z = np.where(np.isnan(alt), np.nanmean(alt), alt)
+    taille = 2 * int(rayon_m // PAS) + 1
+    return z - ndimage.uniform_filter(z, size=taille)
+
+
 def calculer(alt, ph, masque):
     pente, nordicite = pente_exposition(alt)
+    tpi = position_topographique(alt)
     alt = np.where(np.isnan(alt), 0, alt)
     return {
         "altitude": np.where(masque, np.rint(alt), 0),
         "pente": np.where(masque, np.rint(pente * 10), 0),       # dixièmes de degré
         "nordicite": np.where(masque, np.rint(nordicite * 100), 0),  # -100 sud, +100 nord
+        "tpi": np.where(masque, np.rint(tpi), 0),                  # m : négatif = creux, positif = crête
         "ph": np.where(masque, np.rint(ph * 10), 0),             # pH x 10
     }
 

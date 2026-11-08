@@ -1,4 +1,4 @@
-"""Étape 4 : score de potentiel (0 à 100) par espèce et par carré de 250 m.
+"""Étape 4 : score de potentiel (0 à 1000) par espèce et par carré de 100 m.
 
 Le score combine :
 - des règles écologiques (arbres, milieu, acidité du sol, altitude) ;
@@ -6,7 +6,7 @@ Le score combine :
 Les règles servent de garde-fou : un champ de maïs reste à zéro même si des
 observations voisines existent.
 
-Résultat : data/scores.tif (une bande par espèce)
+Résultat : data/scores.tif (une bande par espèce, score de 0 à 1000)
 """
 import numpy as np
 import pandas as pd
@@ -53,7 +53,7 @@ SOL_ALT = {
 VARIABLES_OCC = ["chene", "hetre", "chataignier", "feuillus", "mixte", "sapin_epicea", "pin", "douglas_meleze",
                  "coniferes", "peuplier_robinier", "lande", "foret", "prairie", "pelouse", "agri_naturel",
                  "transition", "cultures", "espace_vert", "urbain", "lisiere"]
-VARIABLES_RELIEF = ["altitude", "pente", "nordicite", "ph"]
+VARIABLES_RELIEF = ["altitude", "pente", "nordicite", "tpi", "ph"]
 MIN_OBS = 25
 # Si une espèce a trop peu d'observations, on apprend sur celles de son groupe
 GROUPES = {
@@ -152,22 +152,22 @@ def main():
         else:
             final = regles * 0.75
             info_modele = None
-        # Mise à l'échelle : les 2 % meilleurs carrés de la zone atteignent 100,
-        # puis une courbe accentue les écarts pour ne garder en couleur vive que le meilleur
-        ref = np.percentile(final, 98)
-        score = np.clip(final / max(ref, 1e-6), 0, 1) ** 1.6 * 100
+        # Mise à l'échelle sur 1000 : seuls les 0,1 % meilleurs carrés de la zone atteignent 1000,
+        # et une courbe accentue les écarts pour réserver les hautes valeurs aux meilleurs coins
+        ref = np.percentile(final, 99.9)
+        score = np.clip(final / max(ref, 1e-6), 0, 1) ** 1.3 * 1000
         grille = np.zeros(LIGNES * COLS, dtype="float32")
         grille[zone] = score
         resultats[espece] = np.rint(grille.reshape(LIGNES, COLS))
         resume[espece] = {"observations": int(n), "modele": source if info_modele else None,
                           "variables_cles": info_modele,
-                          "part_favorable": round(float((score >= 50).mean() * 100), 1)}
+                          "part_favorable": round(float((score >= 500).mean() * 100), 1)}
         print(f"{infos['nom']} : {n} carrés observés, modèle {source if info_modele else 'aucun'}, "
               f"{resume[espece]['part_favorable']} % de la zone favorable")
         if info_modele:
             print(f"  variables les plus utiles : {', '.join(info_modele)}")
 
-    ecrire_bandes(DATA / "scores.tif", resultats, "uint8")
+    ecrire_bandes(DATA / "scores.tif", resultats, "uint16")
     ecrire_json(DATA / "scores_resume.json", resume)
 
 

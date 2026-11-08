@@ -134,7 +134,7 @@
 
     <div class="legende">
       <div class="barre"></div>
-      <div class="barre-txt"><span>Favorable</span><span>Très favorable</span></div>
+      <div class="barre-txt"><span>Favorable (80)</span><span>400</span><span>Exceptionnel (1000)</span></div>
     </div>
 
     <div class="autour">
@@ -227,7 +227,7 @@ function enregistrer() {
   try { localStorage.setItem("toads-espece", espece); localStorage.setItem("toads-mode", mode); } catch (e) {}
 }
 
-const couleurValeur = (v) => v >= 75 ? "#6e1a46" : v >= 50 ? "#d9452b" : v >= 25 ? "#e8892f" : v >= 10 ? "#e8c547" : "#d8d0bf";
+const couleurValeur = (v) => v >= 650 ? "#82204b" : v >= 400 ? "#d9452b" : v >= 200 ? "#e8892f" : v >= 80 ? "#e8c547" : "#d8d0bf";
 function jourCourt(iso, k) {
   if (k === 0) return "Auj.";
   if (k === 1) return "Dem.";
@@ -242,10 +242,10 @@ function afficherAvenir() {
   for (const [cle, p] of Object.entries(info.previsions.especes)) {
     const v = p.zone, max = Math.max(...v.slice(1)), k = v.indexOf(max, 1);
     const nom = info.especes[cle] ? info.especes[cle].nom : cle;
-    if (v[0] >= 60) maintenant.push({ cle, nom, force: v[0] });
-    else if (max >= 60 && max - v[0] >= 20) {
+    if (v[0] >= 300) maintenant.push({ cle, nom, force: v[0] });
+    else if (max >= 300 && max - v[0] >= 150) {
       const quand = k === 1 ? "dès demain" : "vers " + new Date(dates[k] + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric" });
-      avenir.push({ cle, k, force: max, txt: `<b>${nom}</b> : poussée ${max >= 75 ? "forte " : ""}probable ${quand}${k >= 4 ? " (tendance)" : ""}` });
+      avenir.push({ cle, k, force: max, txt: `<b>${nom}</b> : poussée ${max >= 500 ? "forte " : ""}probable ${quand}${k >= 4 ? " (tendance)" : ""}` });
     }
   }
   maintenant.sort((a, b) => b.force - a.force);
@@ -266,13 +266,13 @@ function afficherJours() {
   const dates = info.previsions.dates;
   document.getElementById("jours").innerHTML = dates.map((d, k) => {
     const v = p.zone[k];
-    return `<button data-k="${k}" aria-pressed="${k === jourSel}" class="${k >= 4 ? "tendance" : ""}" title="${dateFr(d)} : ${v}/100">` +
-      `<span>${jourCourt(d, k)}</span><span class="colonne"><span style="height:${Math.max(4, v)}%;background:${couleurValeur(v)}"></span></span>` +
+    return `<button data-k="${k}" aria-pressed="${k === jourSel}" class="${k >= 4 ? "tendance" : ""}" title="${dateFr(d)} : ${v}/1000">` +
+      `<span>${jourCourt(d, k)}</span><span class="colonne"><span style="height:${Math.max(4, v / 10)}%;background:${couleurValeur(v)}"></span></span>` +
       `<span class="val">${v}</span></button>`;
   }).join("");
   document.querySelectorAll("#jours button").forEach((b) => b.onclick = () => { jourSel = +b.dataset.k; afficher(); });
   document.getElementById("jours-legende").textContent =
-    `Chances de pousse dans les meilleurs coins ${info.previsions.zone.nom} (${info.previsions.zone.rayon_km} km), sur 100. ` +
+    `Chances de pousse dans les meilleurs coins ${info.previsions.zone.nom} (${info.previsions.zone.rayon_km} km), sur 1000. ` +
     "Fiable sur 3 jours ; au-delà (cadres en pointillés), c'est une tendance.";
   bloc.hidden = false;
 }
@@ -374,7 +374,7 @@ function direction(a, b) {
   return DIRECTIONS[Math.round(cap / 45) % 8];
 }
 
-const couleurScore = (s) => s >= 75 ? "#6e1a46" : s >= 50 ? "#d9452b" : s >= 30 ? "#e8892f" : "#c9a227";
+const couleurScore = (s) => s >= 650 ? "#82204b" : s >= 400 ? "#d9452b" : s >= 200 ? "#e8892f" : "#c9a227";
 const km = (d) => d < 1 ? `${Math.round(d * 1000)} m` : `${d.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} km`;
 
 function placerCentre(latlng, ajuster) {
@@ -412,7 +412,7 @@ async function chercherAutour(ajuster) {
     const lien = `https://www.google.com/maps/dir/?api=1&destination=${c.lat},${c.lng}`;
     return L.marker([c.lat, c.lng], { zIndexOffset: 500 - i,
       icon: L.divIcon({ className: "coin", html: `<span style="background:${couleurScore(c.s)}">${i + 1}</span>`, iconSize: [30, 30], iconAnchor: [15, 15] }) })
-      .bindPopup(`<b>Coin n° ${i + 1}</b> · score ${c.s}/100<br>${km(c.d)} ${direction(centre, c)}<br><a href="${lien}" target="_blank" rel="noopener">Itinéraire</a>`)
+      .bindPopup(`<b>Coin n° ${i + 1}</b> · score ${c.s}/1000<br>${km(c.d)} ${direction(centre, c)}<br><a href="${lien}" target="_blank" rel="noopener">Itinéraire</a>`)
       .addTo(groupeCoins);
   });
 

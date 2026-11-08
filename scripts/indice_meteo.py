@@ -40,7 +40,8 @@ SAISON = {
     "pied_de_mouton":   {7: .4, 8: .8, 9: 1, 10: 1, 11: 1, 12: .8, 1: .3},
 }
 
-PLUIE_MIN, PLUIE_PLEINE = 5.0, 20.0   # mm sur deux jours
+PLUIE_MIN, PLUIE_ECHELLE = 5.0, 18.0  # mm sur deux jours : 20 mm -> 0,57 ; 40 mm -> 0,86 ; 60 mm -> 0,95
+CUMUL_ECHELLE = 35.0                   # pluie des 14 derniers jours : 35 mm -> 0,63 ; 70 mm -> 0,86
 DUREE_POUSSE = 10                      # jours après la pluie pris en compte pour la température du sol
 GEL = -3.0                             # °C (minimum de l'air) sur les 3 derniers jours
 
@@ -49,6 +50,19 @@ def dans(v, lo, hi, marge):
     """1 dans l'intervalle, puis décroît jusqu'à 0 à « marge » en dehors."""
     d = np.maximum(lo - v, 0) + np.maximum(v - hi, 0)
     return np.clip(1 - d / marge, 0, 1)
+
+
+def pic(v, lo, hi, marge, bord=0.75):
+    """1 au centre de [lo, hi], « bord » aux extrémités, puis décroît jusqu'à 0 à « marge » en dehors.
+
+    Contrairement à un simple intervalle, seul l'optimum atteint 1 : le score ne plafonne pas.
+    """
+    v = np.asarray(v, dtype=float)
+    c, demi = (lo + hi) / 2, max((hi - lo) / 2, 1e-6)
+    dedans = 1 - (1 - bord) * ((v - c) / demi) ** 2
+    d = np.maximum(lo - v, 0) + np.maximum(v - hi, 0)
+    dehors = bord * np.clip(1 - d / marge, 0, 1)
+    return np.where((v >= lo) & (v <= hi), dedans, dehors)
 
 
 def moyenne(a, axis=1):
@@ -71,21 +85,23 @@ def indice(espece, pluie, tsol, tmin, mois):
     meilleur = np.zeros(n)
     for j in range(d - 1):
         jours = (d - 1) - j                        # il y a combien de jours
-        w = float(dans(np.array(jours), *p["delai"], p["marge_delai"]))
+        w = float(pic(jours, *p["delai"], p["marge_delai"]))
         if w == 0:
             continue
-        r = np.clip((deux[:, j] - PLUIE_MIN) / (PLUIE_PLEINE - PLUIE_MIN), 0, 1)
+        r = 1 - np.exp(-np.maximum(deux[:, j] - PLUIE_MIN, 0) / PLUIE_ECHELLE)
         debut, fin = j + 1, min(j + 1 + DUREE_POUSSE, d)
         t_pousse = moyenne(tsol[:, debut:fin]) if fin > debut else tsol[:, -1]
-        f_t = dans(t_pousse, *p["tsol"], p["marge_t"])
+        f_t = pic(t_pousse, *p["tsol"], p["marge_t"])
         meilleur = np.maximum(meilleur, r * w * f_t)
+    # Un sol bien arrosé sur deux semaines aide (plusieurs pluies valent mieux qu'une seule)
+    f_cumul = 1 - np.exp(-passe[:, -14:].sum(axis=1) / CUMUL_ECHELLE)
     t_actuel = moyenne(tsol[:, -3:])
     f_actuel = dans(t_actuel, p["tsol_actuel"], 40, 2)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", category=RuntimeWarning)
         gel = np.nanmin(tmin[:, -4:-1], axis=1) < GEL
     f_gel = np.where(gel, p["gel"], 1)
-    return f_saison * meilleur * f_actuel * f_gel
+    return f_saison * meilleur * (0.6 + 0.4 * f_cumul) * f_actuel * f_gel
 
 
 def jours_depuis_bonne_pluie(pluie):

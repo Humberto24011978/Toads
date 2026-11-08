@@ -17,17 +17,17 @@ DEPARTEMENTS = ["67", "68", "54", "55", "57", "88"]
 # Emprise en degrés (lon min, lat min, lon max, lat max)
 BBOX = (4.80, 47.40, 8.25, 49.65)
 
-# Grille de calcul en Lambert-93 (EPSG:2154), carrés de 250 m
+# Grille de calcul en Lambert-93 (EPSG:2154), carrés de 100 m
 CRS = "EPSG:2154"
 X0, X1 = 830_000, 1_095_000
 Y0, Y1 = 6_700_000, 6_965_000
-PAS = 250
-COLS = (X1 - X0) // PAS          # 1060
-LIGNES = (Y1 - Y0) // PAS        # 1060
+PAS = 100
+COLS = (X1 - X0) // PAS          # 2650
+LIGNES = (Y1 - Y0) // PAS        # 2650
 TRANSFORM = from_origin(X0, Y1, PAS, PAS)
 
-# Grille fine (50 m) pour les forêts et l'occupation du sol
-FIN = 5
+# Grille fine (25 m) pour les forêts et l'occupation du sol
+FIN = 4
 PAS_FIN = PAS // FIN
 TRANSFORM_FIN = from_origin(X0, Y1, PAS_FIN, PAS_FIN)
 

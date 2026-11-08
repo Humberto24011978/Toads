@@ -31,7 +31,7 @@ ANNEE_MIN = 2010
 TEMOINS_HASARD = 2              # dates au hasard par observation
 MIN_PRESENCES = 60
 GRADIENT_AIR, GRADIENT_SOL = 0.0065, 0.0055
-SEUIL_TROUVAILLE = 0.3          # une trouvaille réelle doit ressortir au moins à ce niveau
+SEUIL_TROUVAILLE = 0.2          # une trouvaille réelle doit ressortir au moins à ce niveau (indice sans plafond)
 
 
 def trouvailles():
