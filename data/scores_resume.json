@@ -9,7 +9,7 @@
    "pente",
    "nordicite"
   ],
-  "part_favorable": 19.1
+  "part_favorable": 19.3
  },
  "girolle": {
   "observations": 59,
@@ -33,7 +33,7 @@
    "pente",
    "nordicite"
   ],
-  "part_favorable": 15.3
+  "part_favorable": 14.7
  },
  "chanterelle_tube": {
   "observations": 38,
@@ -57,7 +57,7 @@
    "nordicite",
    "foret"
   ],
-  "part_favorable": 8.2
+  "part_favorable": 7.8
  },
  "rose_des_pres": {
   "observations": 9,
@@ -79,20 +79,20 @@
    "altitude",
    "pente",
    "cultures",
-   "foret"
+   "ph"
   ],
   "part_favorable": 9.5
  },
  "pied_de_mouton": {
-  "observations": 0,
-  "modele": "groupe foret",
+  "observations": 41,
+  "modele": "espèce",
   "variables_cles": [
-   "ph",
    "foret",
+   "ph",
    "altitude",
    "pente",
    "nordicite"
   ],
-  "part_favorable": 22.8
+  "part_favorable": 20.7
  }
 }
