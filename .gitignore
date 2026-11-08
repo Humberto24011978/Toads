@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+site/cartes/
+data/ph_soilgrids.tif

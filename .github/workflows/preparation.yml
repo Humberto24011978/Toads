@@ -1,0 +1,50 @@
+name: Préparation des données
+
+# Lancée à la main (onglet Actions). Télécharge les données ouvertes,
+# calcule le potentiel de chaque carré de 250 m, puis enregistre le
+# résultat dans le dossier data/ du dépôt.
+on:
+  workflow_dispatch:
+    inputs:
+      etapes:
+        description: "Étapes à lancer"
+        type: choice
+        default: tout
+        options: [tout, observations, occupation, relief, scores]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: preparation
+  cancel-in-progress: false
+
+jobs:
+  preparation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: 1. Observations (GBIF)
+        if: inputs.etapes == 'tout' || inputs.etapes == 'observations'
+        run: python scripts/01_observations.py
+      - name: 2. Forêts et occupation du sol (IGN)
+        if: inputs.etapes == 'tout' || inputs.etapes == 'occupation'
+        run: python scripts/02_occupation.py
+      - name: 3. Relief et sol (Copernicus, SoilGrids)
+        if: inputs.etapes == 'tout' || inputs.etapes == 'relief'
+        run: python scripts/03_relief_sol.py
+      - name: 4. Scores par espèce
+        run: python scripts/04_scores.py
+      - name: Enregistrer les données
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/
+          git diff --cached --quiet || git commit -m "Données mises à jour (${{ inputs.etapes }})"
+          git push

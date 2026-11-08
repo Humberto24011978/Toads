@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Toads · Coins à champignons</title>
+<meta name="description" content="Carte gratuite des zones favorables aux champignons en Alsace, Lorraine et Vosges, mise à jour chaque matin avec la météo.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍄</text></svg>">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&display=swap">
+<style>
+  :root {
+    --foret: #1f3a2b; --mousse: #3f6b4a; --creme: #fbf7ef; --encre: #24211c; --gris: #6b6559;
+    --ligne: #e4dccb; --accent: #c8692b; --bon: #2f7d4a; --moyen: #c58a1c; --faible: #9a5b4b; --hors: #8a8478;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--encre); background: var(--creme); }
+  #carte { position: fixed; inset: 0; }
+  .panneau {
+    position: fixed; z-index: 1000; top: 16px; left: 16px; width: 340px; max-height: calc(100% - 32px);
+    overflow: auto; background: var(--creme); border-radius: 14px; box-shadow: 0 6px 24px rgba(0,0,0,.18);
+  }
+  .tete { background: var(--foret); color: #fff; padding: 14px 16px 12px; border-radius: 14px 14px 0 0; display: flex; align-items: center; gap: 10px; }
+  .tete h1 { font-family: Fraunces, Georgia, serif; font-weight: 600; font-size: 22px; margin: 0; letter-spacing: .2px; }
+  .tete p { margin: 2px 0 0; font-size: 12.5px; opacity: .85; }
+  .tete .plier { margin-left: auto; background: none; border: 1px solid rgba(255,255,255,.35); color: #fff; border-radius: 8px; padding: 4px 9px; font-size: 13px; cursor: pointer; display: none; }
+  .corps { padding: 14px 16px 16px; }
+  label.titre { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: .6px; color: var(--gris); margin: 0 0 6px; }
+  .especes { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+  .especes button {
+    border: 1px solid var(--ligne); background: #fff; color: var(--encre); border-radius: 999px; padding: 6px 11px;
+    font-size: 13.5px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+  }
+  .especes button .pt { width: 8px; height: 8px; border-radius: 50%; background: var(--hors); }
+  .especes button[aria-pressed="true"] { background: var(--foret); color: #fff; border-color: var(--foret); }
+  .bascule { display: grid; grid-template-columns: 1fr 1fr; background: #efe8d9; border-radius: 10px; padding: 3px; margin-bottom: 14px; }
+  .bascule button { border: 0; background: none; padding: 7px 0; border-radius: 8px; font-size: 13.5px; cursor: pointer; color: var(--gris); }
+  .bascule button[aria-pressed="true"] { background: #fff; color: var(--encre); box-shadow: 0 1px 3px rgba(0,0,0,.12); font-weight: 600; }
+  .etat { border: 1px solid var(--ligne); background: #fff; border-radius: 12px; padding: 12px; margin-bottom: 14px; }
+  .etat .statut { font-weight: 650; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+  .etat .statut .pt { width: 10px; height: 10px; border-radius: 50%; }
+  .etat .detail { font-size: 13px; color: var(--gris); margin-top: 6px; line-height: 1.45; }
+  .legende { margin-bottom: 14px; }
+  .barre { height: 10px; border-radius: 5px; background: linear-gradient(to right, rgba(246,226,122,.55), rgba(244,163,64,.75), rgba(217,69,43,.85), rgba(110,26,70,.95)); }
+  .barre-txt { display: flex; justify-content: space-between; font-size: 12px; color: var(--gris); margin-top: 4px; }
+  .fiche { font-size: 13.5px; line-height: 1.5; border-top: 1px solid var(--ligne); padding-top: 12px; }
+  .fiche h2 { font-family: Fraunces, Georgia, serif; font-size: 18px; margin: 0 0 4px; font-weight: 600; }
+  .fiche .latin { font-style: italic; color: var(--gris); font-size: 12.5px; margin-bottom: 8px; }
+  .fiche dl { display: grid; grid-template-columns: 72px 1fr; gap: 4px 10px; margin: 0 0 8px; }
+  .fiche dt { color: var(--gris); }
+  .fiche dd { margin: 0; }
+  .fiche .attention { background: #fbeee4; border-left: 3px solid var(--accent); padding: 7px 10px; border-radius: 6px; font-size: 12.5px; }
+  .pied { font-size: 11.5px; color: var(--gris); line-height: 1.45; margin-top: 12px; }
+  .pied a { color: var(--mousse); }
+  .localiser { position: fixed; z-index: 1000; right: 16px; bottom: 28px; background: #fff; border: 0; border-radius: 999px; padding: 10px 14px; font-size: 14px; box-shadow: 0 3px 12px rgba(0,0,0,.2); cursor: pointer; }
+  .leaflet-control-layers { border-radius: 10px !important; }
+  @media (max-width: 640px) {
+    .panneau { top: auto; bottom: 0; left: 0; width: 100%; max-height: 62%; border-radius: 16px 16px 0 0; }
+    .tete { border-radius: 16px 16px 0 0; padding-top: 12px; }
+    .tete .plier { display: inline-block; }
+    .panneau.plie .corps { display: none; }
+    .localiser { bottom: auto; top: 12px; right: 12px; }
+  }
+</style>
+</head>
+<body>
+<div id="carte" role="application" aria-label="Carte des zones favorables"></div>
+
+<section class="panneau" id="panneau">
+  <div class="tete">
+    <div>
+      <h1>🍄 Toads</h1>
+      <p>Coins à champignons · Alsace, Lorraine, Vosges</p>
+    </div>
+    <button class="plier" id="plier" aria-expanded="true">Masquer</button>
+  </div>
+  <div class="corps">
+    <label class="titre">Espèce</label>
+    <div class="especes" id="especes"></div>
+
+    <div class="bascule" role="group" aria-label="Type de carte">
+      <button id="mode-jour" aria-pressed="true">Aujourd'hui</button>
+      <button id="mode-potentiel" aria-pressed="false">Potentiel</button>
+    </div>
+
+    <div class="etat" id="etat">
+      <div class="statut"><span class="pt"></span><span>Chargement…</span></div>
+      <div class="detail"></div>
+    </div>
+
+    <div class="legende">
+      <div class="barre"></div>
+      <div class="barre-txt"><span>Favorable</span><span>Très favorable</span></div>
+    </div>
+
+    <div class="fiche" id="fiche"></div>
+
+    <div class="pied">
+      La carte indique des zones favorables, jamais une certitude. Elle ne remplace pas l'identification :
+      en cas de doute, faites vérifier votre cueillette par un pharmacien ou une société mycologique.
+      Respectez la réglementation locale et les propriétés privées.<br>
+      Données : IGN (BD Forêt, Corine Land Cover), GBIF, Copernicus, ISRIC SoilGrids, Open-Meteo.
+      <a href="https://github.com/Humberto24011978/Toads">Code source</a>.
+    </div>
+  </div>
+</section>
+
+<button class="localiser" id="localiser">📍 Me localiser</button>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const FICHES = {
+  cepe: { latin: "Boletus edulis, B. aereus, B. reticulatus, B. pinophilus", periode: "juillet à novembre",
+    milieu: "Forêts de chênes, hêtres, châtaigniers, épicéas et pins", sol: "Plutôt acide (grès des Vosges)",
+    conseil: "Pousse une dizaine de jours après une bonne pluie, par temps doux." },
+  girolle: { latin: "Cantharellus cibarius", periode: "juin à octobre",
+    milieu: "Feuillus et résineux, souvent dans la mousse", sol: "Acide, bien drainé",
+    conseil: "Revient au même endroit d'une année sur l'autre.",
+    attention: "Ne pas confondre avec le clitocybe orangé ou le clitocybe de l'olivier (toxique)." },
+  trompette: { latin: "Craterellus cornucopioides", periode: "août à décembre",
+    milieu: "Hêtraies et chênaies, sous les feuilles mortes", sol: "Plutôt calcaire (plateaux lorrains)",
+    conseil: "Pousse en groupes serrés, difficile à repérer : cherchez dans les creux humides." },
+  chanterelle_tube: { latin: "Craterellus tubaeformis", periode: "septembre à décembre",
+    milieu: "Sapins et épicéas, mousses humides", sol: "Acide",
+    conseil: "Supporte les premières gelées : c'est souvent la dernière de la saison." },
+  coulemelle: { latin: "Macrolepiota procera", periode: "juillet à octobre",
+    milieu: "Lisières, clairières, prairies près des bois", sol: "Indifférent",
+    conseil: "Ne cueillir que les grands exemplaires (chapeau de plus de 10 cm).",
+    attention: "Les petites lépiotes, de moins de 10 cm, peuvent être mortelles." },
+  rose_des_pres: { latin: "Agaricus campestris", periode: "août à octobre",
+    milieu: "Prairies pâturées, pelouses", sol: "Plutôt riche, peu acide",
+    conseil: "Apparaît après les pluies d'été, souvent en ronds.",
+    attention: "Confusion possible avec l'amanite phalloïde (mortelle) : lamelles toujours roses à brunes, jamais blanches." },
+  coprin: { latin: "Coprinus comatus", periode: "printemps et automne",
+    milieu: "Prairies, pelouses, bords de chemins", sol: "Riche, remué",
+    conseil: "À consommer très jeune, quand les lamelles sont encore blanches." },
+};
+const COULEURS = { "bon moment": "var(--bon)", "conditions moyennes": "var(--moyen)", "peu probable en ce moment": "var(--faible)", "hors saison": "var(--hors)" };
+
+const carte = L.map("carte", { zoomControl: false }).setView([48.45, 6.6], 8);
+L.control.zoom({ position: "topright" }).addTo(carte);
+const wmts = (couche, format) => "https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=" + couche +
+  "&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=" + format;
+const fonds = {
+  "Plan IGN": L.tileLayer(wmts("GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2", "image/png"), { maxZoom: 18, attribution: "© IGN" }),
+  "Photos aériennes": L.tileLayer(wmts("ORTHOIMAGERY.ORTHOPHOTOS", "image/jpeg"), { maxZoom: 18, attribution: "© IGN" }),
+  "OpenStreetMap": L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 18, attribution: "© OpenStreetMap" }),
+};
+fonds["Plan IGN"].addTo(carte);
+L.control.layers(fonds, null, { position: "topright" }).addTo(carte);
+
+let info = null, couche = null, espece = "cepe", mode = "jour";
+try { espece = localStorage.getItem("toads-espece") || espece; mode = localStorage.getItem("toads-mode") || mode; } catch (e) {}
+
+function boutonsEspeces() {
+  const zone = document.getElementById("especes");
+  zone.innerHTML = "";
+  for (const [cle, e] of Object.entries(info.especes)) {
+    const b = document.createElement("button");
+    b.setAttribute("aria-pressed", cle === espece);
+    b.innerHTML = `<span class="pt" style="background:${COULEURS[e.statut]}"></span>${e.nom}`;
+    b.onclick = () => { espece = cle; enregistrer(); afficher(); };
+    zone.appendChild(b);
+  }
+}
+
+function enregistrer() {
+  try { localStorage.setItem("toads-espece", espece); localStorage.setItem("toads-mode", mode); } catch (e) {}
+}
+
+function dateFr(iso) {
+  return new Date(iso + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+}
+
+function afficher() {
+  if (!info.especes[espece]) espece = Object.keys(info.especes)[0];
+  const e = info.especes[espece], f = FICHES[espece], m = info.meteo;
+  boutonsEspeces();
+  document.getElementById("mode-jour").setAttribute("aria-pressed", mode === "jour");
+  document.getElementById("mode-potentiel").setAttribute("aria-pressed", mode === "potentiel");
+
+  if (couche) carte.removeLayer(couche);
+  couche = L.imageOverlay(`cartes/${espece}_${mode}.png?d=${info.date}`, info.bornes, { opacity: 0.85, interactive: false }).addTo(carte);
+
+  const etat = document.getElementById("etat");
+  if (mode === "jour") {
+    etat.querySelector(".statut").innerHTML = `<span class="pt" style="background:${COULEURS[e.statut]}"></span><span>${e.statut.charAt(0).toUpperCase() + e.statut.slice(1)}</span>`;
+    let d = `Mise à jour ${dateFr(info.date)}. Pluie sur 14 jours : ${m.pluie_14j_mm} mm, température moyenne sur 7 jours : ${m.temperature_7j} °C`;
+    d += m.jours_depuis_bonne_pluie < 99 ? `, dernière bonne pluie il y a ${m.jours_depuis_bonne_pluie} jours.` : ", pas de bonne pluie depuis 3 semaines.";
+    if (m.gel_recent) d += " Gelées récentes.";
+    if (!e.saison) d += " Passez en mode « Potentiel » pour voir les bons coins hors saison.";
+    etat.querySelector(".detail").textContent = d;
+  } else {
+    etat.querySelector(".statut").innerHTML = `<span class="pt" style="background:var(--mousse)"></span><span>Potentiel toute saison</span>`;
+    etat.querySelector(".detail").textContent = "Zones où les arbres, le sol et le milieu conviennent, sans tenir compte de la météo du moment.";
+  }
+
+  document.getElementById("fiche").innerHTML =
+    `<h2>${e.nom}</h2><div class="latin">${f.latin}</div>
+     <dl><dt>Saison</dt><dd>${f.periode}</dd><dt>Milieu</dt><dd>${f.milieu}</dd><dt>Sol</dt><dd>${f.sol}</dd></dl>
+     <p style="margin:0 0 8px">${f.conseil}</p>` + (f.attention ? `<div class="attention">⚠️ ${f.attention}</div>` : "");
+}
+
+document.getElementById("mode-jour").onclick = () => { mode = "jour"; enregistrer(); afficher(); };
+document.getElementById("mode-potentiel").onclick = () => { mode = "potentiel"; enregistrer(); afficher(); };
+document.getElementById("plier").onclick = () => {
+  const p = document.getElementById("panneau"), plie = p.classList.toggle("plie");
+  document.getElementById("plier").textContent = plie ? "Afficher" : "Masquer";
+  document.getElementById("plier").setAttribute("aria-expanded", !plie);
+};
+
+let position = null;
+document.getElementById("localiser").onclick = () => carte.locate({ setView: true, maxZoom: 14 });
+carte.on("locationfound", (ev) => {
+  if (position) carte.removeLayer(position);
+  position = L.circleMarker(ev.latlng, { radius: 8, color: "#fff", weight: 3, fillColor: "#2a6fdb", fillOpacity: 1 }).addTo(carte);
+});
+carte.on("locationerror", () => alert("Position introuvable : vérifiez que la localisation est autorisée."));
+
+fetch("cartes/info.json", { cache: "no-store" })
+  .then((r) => r.json())
+  .then((j) => { info = j; afficher(); })
+  .catch(() => {
+    document.querySelector("#etat .statut").textContent = "Cartes pas encore disponibles";
+    document.querySelector("#etat .detail").textContent = "Les premières cartes sont en cours de calcul. Revenez dans quelques minutes.";
+  });
+</script>
+</body>
+</html>
