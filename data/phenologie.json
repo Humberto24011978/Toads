@@ -4,28 +4,28 @@
   "cepe": {
    "presences": 726,
    "temoins": 2763,
-   "auc_defaut": 0.588,
-   "auc_appris": 0.606,
+   "auc_defaut": 0.597,
+   "auc_appris": 0.609,
    "retenu": false,
    "delai": [
     9,
     22
    ],
    "tsol": [
-    11,
+    9,
     21
    ],
    "trouvailles": 1,
-   "reglages_refuses_par_trouvailles": 136
+   "reglages_refuses_par_trouvailles": 211
   },
   "girolle": {
    "presences": 536,
    "temoins": 2937,
-   "auc_defaut": 0.55,
-   "auc_appris": 0.601,
+   "auc_defaut": 0.551,
+   "auc_appris": 0.616,
    "retenu": true,
    "delai": [
-    3,
+    2,
     30
    ],
    "tsol": [
@@ -38,16 +38,16 @@
   "trompette": {
    "presences": 101,
    "temoins": 3121,
-   "auc_defaut": 0.528,
-   "auc_appris": 0.537,
+   "auc_defaut": 0.53,
+   "auc_appris": 0.527,
    "retenu": false,
    "delai": [
-    9,
-    18
+    5,
+    30
    ],
    "tsol": [
     5,
-    13
+    15
    ],
    "trouvailles": 0,
    "reglages_refuses_par_trouvailles": 0
@@ -55,16 +55,16 @@
   "chanterelle_tube": {
    "presences": 94,
    "temoins": 3081,
-   "auc_defaut": 0.627,
-   "auc_appris": 0.673,
-   "retenu": true,
+   "auc_defaut": 0.595,
+   "auc_appris": 0.59,
+   "retenu": false,
    "delai": [
     5,
     30
    ],
    "tsol": [
     3,
-    11
+    13
    ],
    "trouvailles": 0,
    "reglages_refuses_par_trouvailles": 0
@@ -72,8 +72,8 @@
   "coulemelle": {
    "presences": 626,
    "temoins": 2761,
-   "auc_defaut": 0.574,
-   "auc_appris": 0.58,
+   "auc_defaut": 0.593,
+   "auc_appris": 0.593,
    "retenu": false,
    "delai": [
     9,
@@ -89,16 +89,16 @@
   "rose_des_pres": {
    "presences": 108,
    "temoins": 3133,
-   "auc_defaut": 0.488,
-   "auc_appris": 0.58,
+   "auc_defaut": 0.506,
+   "auc_appris": 0.557,
    "retenu": true,
    "delai": [
     2,
     10
    ],
    "tsol": [
-    13,
-    19
+    11,
+    21
    ],
    "trouvailles": 0,
    "reglages_refuses_par_trouvailles": 0
@@ -106,12 +106,12 @@
   "coprin": {
    "presences": 798,
    "temoins": 2748,
-   "auc_defaut": 0.533,
-   "auc_appris": 0.62,
+   "auc_defaut": 0.54,
+   "auc_appris": 0.614,
    "retenu": true,
    "delai": [
-    3,
-    22
+    5,
+    26
    ],
    "tsol": [
     7,
@@ -123,16 +123,16 @@
   "pied_de_mouton": {
    "presences": 208,
    "temoins": 2946,
-   "auc_defaut": 0.431,
-   "auc_appris": 0.391,
+   "auc_defaut": 0.44,
+   "auc_appris": 0.427,
    "retenu": false,
    "delai": [
-    5,
-    30
+    3,
+    10
    ],
    "tsol": [
     13,
-    19
+    17
    ],
    "trouvailles": 0,
    "reglages_refuses_par_trouvailles": 0
