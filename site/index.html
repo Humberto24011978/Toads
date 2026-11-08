@@ -81,7 +81,7 @@
     .tete { border-radius: 16px 16px 0 0; padding-top: 12px; }
     .tete .plier { display: inline-block; }
     .panneau.plie .corps { display: none; }
-    .localiser { bottom: auto; top: 12px; right: 12px; }
+    .localiser { bottom: auto; top: 12px; right: auto; left: 12px; }
   }
 </style>
 </head>
@@ -241,7 +241,7 @@ function afficher() {
       .sort((a, b) => a[1].localeCompare(b[1]))
       .map(([n, d], i) => (i === 0 ? n.charAt(0).toUpperCase() + n.slice(1) : n) + " le " + court(d)).join(", ");
     zl.innerHTML = `<span class="icone">${l.emoji}</span><span><b>${l.phase}</b>, éclairée à ${l.illumination} %` +
-      ` (lune ${l.croissante ? "croissante" : "décroissante"}).<br>${prochaines}.</span>`;
+      ` (lune ${l.croissante ? "croissante" : "décroissante"}).<br>${prochaines.replace(/\.$/, "")}.</span>`;
     zl.hidden = false;
   }
 
@@ -348,6 +348,7 @@ async function chercherAutour(ajuster) {
     `<span>Score ${c.s} <span class="km">· ${km(c.d)} ${direction(centre, c)}</span></span></button></li>`).join("")}</ol>`;
   zone.querySelectorAll("button").forEach((b) => b.onclick = () => {
     const m = marqueurs[+b.dataset.i];
+    if (window.innerWidth <= 640 && !document.getElementById("panneau").classList.contains("plie")) document.getElementById("plier").click();
     carte.setView(m.getLatLng(), Math.max(carte.getZoom(), 14));
     m.openPopup();
   });
@@ -369,7 +370,7 @@ carte.on("locationerror", () => {
   placerCentre(centre || carte.getCenter(), !centre).then(() => document.getElementById("resultats").insertAdjacentHTML("afterbegin",
     `<p class="aide" style="margin-bottom:8px">Position introuvable : vérifiez que la localisation est autorisée. En attendant, déplacez le point bleu à l'endroit voulu.</p>`));
 });
-carte.on("contextmenu", (ev) => placerCentre(ev.latlng, false));
+carte.on("contextmenu", (ev) => placerCentre(ev.latlng, !centre));
 
 fetch("cartes/info.json", { cache: "no-store" })
   .then((r) => r.json())
