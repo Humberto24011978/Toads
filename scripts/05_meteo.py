@@ -12,6 +12,7 @@ Résultats :
 import datetime as dt
 from zoneinfo import ZoneInfo
 
+import ephem
 import numpy as np
 from PIL import Image
 from pyproj import Transformer
@@ -150,6 +151,25 @@ def image(grille, t, w, h, lut, chemin):
     Image.fromarray(lut[np.clip(np.rint(dst), 0, 255).astype(np.uint8)], "RGBA").save(chemin, optimize=True)
 
 
+PHASES = [("Nouvelle lune", "🌑"), ("Premier croissant", "🌒"), ("Premier quartier", "🌓"),
+          ("Gibbeuse croissante", "🌔"), ("Pleine lune", "🌕"), ("Gibbeuse décroissante", "🌖"),
+          ("Dernier quartier", "🌗"), ("Dernier croissant", "🌘")]
+
+
+def lune(jour):
+    """Phase de la lune à midi (heure de Paris) et dates des prochaines nouvelle et pleine lunes."""
+    paris = ZoneInfo("Europe/Paris")
+    midi = dt.datetime(jour.year, jour.month, jour.day, 12, tzinfo=paris).astimezone(dt.timezone.utc)
+    d = ephem.Date(midi.replace(tzinfo=None))
+    avant, apres = ephem.previous_new_moon(d), ephem.next_new_moon(d)
+    fraction = (d - avant) / (apres - avant)
+    nom, emoji = PHASES[int(round(fraction * 8)) % 8]
+    date_locale = lambda e: e.datetime().replace(tzinfo=dt.timezone.utc).astimezone(paris).date().isoformat()
+    return {"phase": nom, "emoji": emoji, "illumination": round(ephem.Moon(d).phase),
+            "croissante": ephem.next_full_moon(d) < apres,
+            "prochaine_nouvelle": date_locale(apres), "prochaine_pleine": date_locale(ephem.next_full_moon(d))}
+
+
 def statut(valeur, f_saison):
     if f_saison == 0:
         return "hors saison"
@@ -215,6 +235,7 @@ def main():
             "jours_depuis_bonne_pluie": int(np.median(r["jours"][dans_zone])),
             "gel_recent": bool(np.mean(r["gel"][dans_zone]) > 0.3),
         },
+        "lune": lune(aujourdhui),
         "especes": infos,
     })
     print("Cartes du jour prêtes.")

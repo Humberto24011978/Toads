@@ -42,6 +42,9 @@
   .etat .statut { font-weight: 650; font-size: 16px; display: flex; align-items: center; gap: 8px; }
   .etat .statut .pt { width: 10px; height: 10px; border-radius: 50%; }
   .etat .detail { font-size: 13px; color: var(--gris); margin-top: 6px; line-height: 1.45; }
+  .lune { display: flex; gap: 10px; align-items: center; font-size: 13px; color: var(--gris); margin: -4px 0 14px; line-height: 1.4; }
+  .lune .icone { font-size: 24px; line-height: 1; }
+  .lune b { color: var(--encre); font-weight: 600; }
   .legende { margin-bottom: 14px; }
   .barre { height: 10px; border-radius: 5px; background: linear-gradient(to right, rgba(246,226,122,.55), rgba(244,163,64,.75), rgba(217,69,43,.85), rgba(110,26,70,.95)); }
   .barre-txt { display: flex; justify-content: space-between; font-size: 12px; color: var(--gris); margin-top: 4px; }
@@ -89,6 +92,8 @@
       <div class="statut"><span class="pt"></span><span>Chargement…</span></div>
       <div class="detail"></div>
     </div>
+
+    <div class="lune" id="lune" hidden></div>
 
     <div class="legende">
       <div class="barre"></div>
@@ -198,6 +203,17 @@ function afficher() {
   } else {
     etat.querySelector(".statut").innerHTML = `<span class="pt" style="background:var(--mousse)"></span><span>Potentiel toute saison</span>`;
     etat.querySelector(".detail").textContent = "Zones où les arbres, le sol et le milieu conviennent, sans tenir compte de la météo du moment.";
+  }
+
+  const l = info.lune, zl = document.getElementById("lune");
+  if (l) {
+    const court = (iso) => new Date(iso + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" });
+    const prochaines = [["Nouvelle lune", l.prochaine_nouvelle], ["pleine lune", l.prochaine_pleine]]
+      .sort((a, b) => a[1].localeCompare(b[1]))
+      .map(([n, d], i) => (i === 0 ? n.charAt(0).toUpperCase() + n.slice(1) : n) + " le " + court(d)).join(", ");
+    zl.innerHTML = `<span class="icone">${l.emoji}</span><span><b>${l.phase}</b>, éclairée à ${l.illumination} %` +
+      ` (lune ${l.croissante ? "croissante" : "décroissante"}).<br>${prochaines}.</span>`;
+    zl.hidden = false;
   }
 
   document.getElementById("fiche").innerHTML =
