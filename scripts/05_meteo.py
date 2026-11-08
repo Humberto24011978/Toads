@@ -1,8 +1,8 @@
 """Étape quotidienne : météo des trois dernières semaines et cartes du jour.
 
-Source : Open-Meteo (gratuit, sans clé).
-Pour chaque espèce, un indice « c'est le moment » (saison, pluie, délai depuis
-la dernière bonne pluie, température, gel) multiplie le score de potentiel.
+Source : Open-Meteo (gratuit, sans clé) : pluie, température de l'air et du sol sur 30 jours.
+L'indice de chaque espèce (voir indice_meteo.py) est calculé à plusieurs altitudes,
+puis chaque carré de 250 m prend la valeur de son altitude. Il multiplie le score de potentiel.
 
 Résultats :
 - site/cartes/<espece>_jour.png : la carte du jour
@@ -20,34 +20,19 @@ from rasterio.transform import from_origin
 from rasterio.warp import Resampling, calculate_default_transform, reproject, transform_bounds
 from scipy import ndimage
 
+import indice_meteo as im
 from commun import (BBOX, COLS, CRS, DATA, ESPECES, LIGNES, PAS, SITE, TRANSFORM, X0, X1, Y0, Y1, ecrire_json, get,
                     lire_bandes)
 
 API = "https://api.open-meteo.com/v1/forecast"
 PAS_METEO = (0.15, 0.12)  # degrés (lon, lat) : environ 11 x 13 km
-
-# Saison : 1 en pleine saison, valeur réduite en début ou fin de saison
-SAISON = {
-    "cepe":             {6: .4, 7: 1, 8: 1, 9: 1, 10: 1, 11: .4},
-    "girolle":          {6: .5, 7: 1, 8: 1, 9: 1, 10: 1, 11: .3},
-    "trompette":        {8: .5, 9: 1, 10: 1, 11: 1, 12: .3},
-    "chanterelle_tube": {8: .3, 9: 1, 10: 1, 11: 1, 12: .8, 1: .3},
-    "coulemelle":       {6: .4, 7: 1, 8: 1, 9: 1, 10: 1, 11: .3},
-    "rose_des_pres":    {6: .4, 7: .6, 8: 1, 9: 1, 10: 1, 11: .4},
-    "coprin":           {4: .4, 5: .5, 6: .4, 7: .4, 8: .5, 9: 1, 10: 1, 11: 1, 12: .3},
-    "pied_de_mouton":   {7: .3, 8: .6, 9: 1, 10: 1, 11: 1, 12: .6},
-}
-TEMPERATURE = {  # moyenne sur 7 jours idéale (°C)
-    "cepe": (10, 20), "girolle": (12, 22), "trompette": (8, 18), "chanterelle_tube": (4, 15),
-    "coulemelle": (10, 20), "rose_des_pres": (10, 20), "coprin": (6, 18),
-    "pied_de_mouton": (6, 18),
-}
-RESISTANCE_GEL = {"chanterelle_tube": .7, "trompette": .6, "pied_de_mouton": .6}
-
-
-def dans(v, lo, hi, marge):
-    d = np.maximum(lo - v, 0) + np.maximum(v - hi, 0)
-    return np.clip(1 - d / marge, 0, 1)
+JOURS_PASSES = 30
+# Baisse de température avec l'altitude (°C par mètre)
+GRADIENT_AIR, GRADIENT_SOL = 0.0065, 0.0055
+# Altitudes de calcul : l'indice est calculé à chaque niveau, puis chaque carré prend celui de son altitude
+NIVEAUX = np.arange(100, 1501, 100)
+# Points de contrôle (trouvailles réelles) : leur indice est affiché dans le journal de calcul
+CONTROLES = {"Sandweg, Oberhaslach (cèpes le 7 novembre 2026)": (48.556, 7.315)}
 
 
 def points_meteo():
@@ -59,14 +44,15 @@ def points_meteo():
 def meteo():
     lons, lats = points_meteo()
     pts = [(lo, la) for la in lats for lo in lons]
-    pluie, tmoy, tmin = [], [], []
-    for i in range(0, len(pts), 100):
-        lot = pts[i:i + 100]
+    pluie, tmoy, tmin, tsol, alt = [], [], [], [], []
+    for i in range(0, len(pts), 50):
+        lot = pts[i:i + 50]
         data = get(API, {
             "longitude": ",".join(f"{p[0]:.3f}" for p in lot),
             "latitude": ",".join(f"{p[1]:.3f}" for p in lot),
             "daily": "precipitation_sum,temperature_2m_mean,temperature_2m_min",
-            "past_days": 21, "forecast_days": 1, "timezone": "Europe/Paris",
+            "hourly": "soil_temperature_6cm",
+            "past_days": JOURS_PASSES, "forecast_days": 1, "timezone": "Europe/Paris",
         }).json()
         data = data if isinstance(data, list) else [data]
         for d in data:
@@ -74,37 +60,12 @@ def meteo():
             pluie.append(np.array(j["precipitation_sum"], dtype=float))
             tmoy.append(np.array(j["temperature_2m_mean"], dtype=float))
             tmin.append(np.array(j["temperature_2m_min"], dtype=float))
-    forme = (len(lats), len(lons))
-    return {"pluie": np.nan_to_num(np.array(pluie)), "tmoy": np.array(tmoy), "tmin": np.array(tmin), "forme": forme}
-
-
-def resume_meteo(m):
-    """Résume la météo de chaque point (aujourd'hui = dernier jour de la série)."""
-    pluie = m["pluie"]
-    passe = pluie[:, :-1]                                   # jours écoulés, sans aujourd'hui
-    pluie14 = passe[:, -14:].sum(axis=1)
-    # Bonne pluie : au moins 8 mm sur une journée, ou 15 mm sur deux jours
-    deux = passe[:, 1:] + passe[:, :-1]
-    bonne = (passe[:, 1:] >= 8) | (deux >= 15)
-    jours = np.full(len(pluie), 99.0)
-    for i in range(len(pluie)):
-        idx = np.flatnonzero(bonne[i])
-        if len(idx):
-            jours[i] = bonne.shape[1] - idx[-1]
-    tmoy7 = np.nanmean(m["tmoy"][:, -8:-1], axis=1)
-    gel = np.nanmin(m["tmin"][:, -6:], axis=1) < -2
-    return {"pluie14": pluie14, "jours": jours, "tmoy7": tmoy7, "gel": gel}
-
-
-def indice(espece, r, mois):
-    f_saison = SAISON[espece].get(mois, 0)
-    if f_saison == 0:
-        return np.zeros(len(r["pluie14"]))
-    f_pluie = np.clip(r["pluie14"] / 40, 0, 1)
-    f_delai = dans(r["jours"], 5, 20, 8)
-    f_temp = dans(r["tmoy7"], *TEMPERATURE[espece], 6)
-    f_gel = np.where(r["gel"], RESISTANCE_GEL.get(espece, .3), 1)
-    return f_saison * f_gel * f_temp * (0.5 * f_pluie + 0.5 * f_delai)
+            horaire = np.array(d["hourly"]["soil_temperature_6cm"], dtype=float)
+            with np.errstate(invalid="ignore"):
+                tsol.append(np.nanmean(horaire[:len(horaire) // 24 * 24].reshape(-1, 24), axis=1))
+            alt.append(float(d.get("elevation") or 0))
+    return {"pluie": np.array(pluie), "tmoy": np.array(tmoy), "tmin": np.array(tmin), "tsol": np.array(tsol),
+            "alt": np.array(alt), "forme": (len(lats), len(lons))}
 
 
 def vers_grille(valeurs, forme):
@@ -116,6 +77,22 @@ def vers_grille(valeurs, forme):
     reproject(src, dst, src_transform=t, src_crs="EPSG:4326", dst_transform=TRANSFORM, dst_crs=CRS,
               resampling=Resampling.bilinear)
     return dst
+
+
+def indice_grille(espece, m, mois, altitude):
+    """Indice sur la grille de 250 m, en tenant compte de l'altitude de chaque carré."""
+    niveaux = []
+    for z in NIVEAUX:
+        ecart = (m["alt"] - z)[:, None]
+        ind = im.indice(espece, m["pluie"], m["tsol"] + GRADIENT_SOL * ecart, m["tmin"] + GRADIENT_AIR * ecart, mois)
+        niveaux.append(vers_grille(ind, m["forme"]))
+    niveaux = np.stack(niveaux)
+    pos = np.clip((altitude - NIVEAUX[0]) / (NIVEAUX[1] - NIVEAUX[0]), 0, len(NIVEAUX) - 1)
+    bas = np.floor(pos).astype(int)
+    haut = np.minimum(bas + 1, len(NIVEAUX) - 1)
+    f = pos - bas
+    lig, col = np.indices(altitude.shape)
+    return np.clip(niveaux[bas, lig, col] * (1 - f) + niveaux[haut, lig, col] * f, 0, 1)
 
 
 # Palette : jaune pâle -> orange -> rouge -> prune ; transparent sous le seuil
@@ -207,17 +184,22 @@ def statut(valeur, f_saison):
     return "peu probable en ce moment"
 
 
+def case(lat, lon):
+    x, y = Transformer.from_crs(4326, CRS, always_xy=True).transform(lon, lat)
+    return int((Y1 - y) // PAS), int((x - X0) // PAS)
+
+
 def main():
     if not (DATA / "scores.tif").exists():
         print("Pas encore de scores : lancez d'abord la préparation des données.")
         return
     scores = lire_bandes(DATA / "scores.tif")
     masque = lire_bandes(DATA / "occupation.tif")["masque"] > 0
+    altitude = lire_bandes(DATA / "relief_sol.tif")["altitude"].astype("float32")
     aujourdhui = dt.datetime.now(ZoneInfo("Europe/Paris")).date()
     mois = aujourdhui.month
     print(f"Météo du {aujourdhui}...")
     m = meteo()
-    r = resume_meteo(m)
 
     # Points météo situés dans la zone, pour l'état régional
     lons, lats = points_meteo()
@@ -236,33 +218,43 @@ def main():
     t, w, h, bornes = preparer_mercator()
     lut = table_couleurs()
     infos = {}
+    controles = {nom: case(*pos) for nom, pos in CONTROLES.items()}
     for espece, nom in ((k, v["nom"]) for k, v in ESPECES.items()):
         if espece not in scores:
             print(f"{nom} : pas encore de score, ignorée")
             continue
-        ind = indice(espece, r, mois)
-        ind_grille = np.clip(vers_grille(ind, m["forme"]), 0, 1)
+        ind_grille = indice_grille(espece, m, mois, altitude)
         jour = scores[espece].astype("float32") * ind_grille
         image(jour, t, w, h, lut, sortie / f"{espece}_jour.png")
         image(scores[espece], t, w, h, lut, sortie / f"{espece}_potentiel.png")
         ecrire_json(sortie / f"secteurs_{espece}.json", {
             "jour": secteurs(jour, 15), "potentiel": secteurs(scores[espece], 35)})
-        regional = float(np.mean(ind[dans_zone]))
-        meilleur = float(np.percentile(ind[dans_zone], 90))
+        # État régional : indice des carrés de la zone où l'espèce a un bon potentiel
+        bons = masque & (scores[espece] >= 50)
+        valeurs = ind_grille[bons] if bons.any() else ind_grille[masque]
+        regional, meilleur = float(np.mean(valeurs)), float(np.percentile(valeurs, 90))
+        f_saison = im.SAISON[espece].get(mois, 0)
         infos[espece] = {"nom": nom, "indice": round(regional * 100), "indice_meilleur": round(meilleur * 100),
-                         "statut": statut(meilleur, SAISON[espece].get(mois, 0)),
-                         "saison": SAISON[espece].get(mois, 0) > 0}
+                         "statut": statut(meilleur, f_saison), "saison": f_saison > 0}
         print(f"{nom} : indice {infos[espece]['indice']} (meilleurs secteurs {infos[espece]['indice_meilleur']}) "
               f"-> {infos[espece]['statut']}")
+        for nom_c, (lc, cc) in controles.items():
+            print(f"  contrôle {nom_c} : indice {ind_grille[lc, cc]:.2f}, potentiel {scores[espece][lc, cc]}, "
+                  f"carte du jour {jour[lc, cc]:.0f}")
 
+    with np.errstate(invalid="ignore"):
+        tmoy7 = np.nanmean(m["tmoy"][:, -8:-1], axis=1)
+        tsol7 = np.nanmean(m["tsol"][:, -8:-1], axis=1)
+        gel = np.nanmin(m["tmin"][:, -4:-1], axis=1) < im.GEL
     ecrire_json(sortie / "info.json", {
         "date": aujourdhui.isoformat(),
         "bornes": bornes,
         "meteo": {
-            "pluie_14j_mm": round(float(np.mean(r["pluie14"][dans_zone])), 1),
-            "temperature_7j": round(float(np.nanmean(r["tmoy7"][dans_zone])), 1),
-            "jours_depuis_bonne_pluie": int(np.median(r["jours"][dans_zone])),
-            "gel_recent": bool(np.mean(r["gel"][dans_zone]) > 0.3),
+            "pluie_14j_mm": round(float(np.mean(np.nansum(m["pluie"][:, -15:-1], axis=1)[dans_zone])), 1),
+            "temperature_7j": round(float(np.nanmean(tmoy7[dans_zone])), 1),
+            "temperature_sol_7j": round(float(np.nanmean(tsol7[dans_zone])), 1),
+            "jours_depuis_bonne_pluie": int(np.median(im.jours_depuis_bonne_pluie(m["pluie"])[dans_zone])),
+            "gel_recent": bool(np.mean(gel[dans_zone]) > 0.3),
         },
         "lune": lune(aujourdhui),
         "especes": infos,

@@ -224,7 +224,8 @@ function afficher() {
   const etat = document.getElementById("etat");
   if (mode === "jour") {
     etat.querySelector(".statut").innerHTML = `<span class="pt" style="background:${COULEURS[e.statut]}"></span><span>${e.statut.charAt(0).toUpperCase() + e.statut.slice(1)}</span>`;
-    let d = `Mise à jour ${dateFr(info.date)}. Pluie sur 14 jours : ${m.pluie_14j_mm} mm, température moyenne sur 7 jours : ${m.temperature_7j} °C`;
+    let d = `Mise à jour ${dateFr(info.date)}. Pluie sur 14 jours : ${m.pluie_14j_mm} mm, température moyenne sur 7 jours : ${m.temperature_7j} °C` +
+      (m.temperature_sol_7j != null ? ` (sol : ${m.temperature_sol_7j} °C)` : "");
     d += m.jours_depuis_bonne_pluie < 99 ? `, dernière bonne pluie il y a ${m.jours_depuis_bonne_pluie} jours.` : ", pas de bonne pluie depuis 3 semaines.";
     if (m.gel_recent) d += " Gelées récentes.";
     if (!e.saison) d += " Passez en mode « Potentiel » pour voir les bons coins hors saison.";

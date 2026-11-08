@@ -10,7 +10,7 @@ on:
     types: [completed]
   push:
     branches: [main]
-    paths: ["site/**", "scripts/05_meteo.py"]
+    paths: ["site/**", "scripts/05_meteo.py", "scripts/indice_meteo.py", "scripts/commun.py", "requirements.txt"]
 
 permissions:
   contents: read
