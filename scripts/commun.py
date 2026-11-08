@@ -91,5 +91,8 @@ def lire_bandes(chemin):
         return {src.descriptions[i - 1]: src.read(i) for i in range(1, src.count + 1)}
 
 
-def ecrire_json(chemin, obj):
-    Path(chemin).write_text(json.dumps(obj, ensure_ascii=False, indent=1), encoding="utf-8")
+def ecrire_json(chemin, obj, compact=None):
+    compact = Path(chemin).name.startswith("secteurs_") if compact is None else compact
+    texte = json.dumps(obj, ensure_ascii=False, separators=(",", ":")) if compact else \
+        json.dumps(obj, ensure_ascii=False, indent=1)
+    Path(chemin).write_text(texte, encoding="utf-8")

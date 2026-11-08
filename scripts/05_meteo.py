@@ -18,6 +18,7 @@ from PIL import Image
 from pyproj import Transformer
 from rasterio.transform import from_origin
 from rasterio.warp import Resampling, calculate_default_transform, reproject, transform_bounds
+from scipy import ndimage
 
 from commun import (BBOX, COLS, CRS, DATA, ESPECES, LIGNES, PAS, SITE, TRANSFORM, X0, X1, Y0, Y1, ecrire_json, get,
                     lire_bandes)
@@ -151,6 +152,32 @@ def image(grille, t, w, h, lut, chemin):
     Image.fromarray(lut[np.clip(np.rint(dst), 0, 255).astype(np.uint8)], "RGBA").save(chemin, optimize=True)
 
 
+def secteurs(grille, seuil, rayon=3):
+    """Meilleurs secteurs d'une carte : moyenne sur 750 m, puis un seul point par voisinage de ~1,75 km.
+
+    Renvoie [[lat, lon, score], ...] du meilleur au moins bon.
+    """
+    lisse = ndimage.uniform_filter(grille.astype("float32"), size=3)
+    lig, col = np.nonzero(lisse >= seuil)
+    ordre = np.argsort(-lisse[lig, col], kind="stable")
+    pris = np.zeros(lisse.shape, dtype=bool)
+    choisis = []
+    for i in ordre:
+        li, c = lig[i], col[i]
+        if pris[li, c]:
+            continue
+        choisis.append(i)
+        pris[max(li - rayon, 0):li + rayon + 1, max(c - rayon, 0):c + rayon + 1] = True
+    choisis = np.array(choisis, dtype=int)
+    if len(choisis) == 0:
+        return []
+    x = X0 + (col[choisis] + 0.5) * PAS
+    y = Y1 - (lig[choisis] + 0.5) * PAS
+    lon, lat = Transformer.from_crs(CRS, 4326, always_xy=True).transform(x, y)
+    valeurs = lisse[lig[choisis], col[choisis]]
+    return [[round(float(a), 4), round(float(o), 4), int(round(float(v)))] for a, o, v in zip(lat, lon, valeurs)]
+
+
 PHASES = [("Nouvelle lune", "🌑"), ("Premier croissant", "🌒"), ("Premier quartier", "🌓"),
           ("Gibbeuse croissante", "🌔"), ("Pleine lune", "🌕"), ("Gibbeuse décroissante", "🌖"),
           ("Dernier quartier", "🌗"), ("Dernier croissant", "🌘")]
@@ -218,6 +245,8 @@ def main():
         jour = scores[espece].astype("float32") * ind_grille
         image(jour, t, w, h, lut, sortie / f"{espece}_jour.png")
         image(scores[espece], t, w, h, lut, sortie / f"{espece}_potentiel.png")
+        ecrire_json(sortie / f"secteurs_{espece}.json", {
+            "jour": secteurs(jour, 15), "potentiel": secteurs(scores[espece], 35)})
         regional = float(np.mean(ind[dans_zone]))
         meilleur = float(np.percentile(ind[dans_zone], 90))
         infos[espece] = {"nom": nom, "indice": round(regional * 100), "indice_meilleur": round(meilleur * 100),

@@ -59,6 +59,23 @@
   .pied a { color: var(--mousse); }
   .localiser { position: fixed; z-index: 1000; right: 16px; bottom: 28px; background: #fff; border: 0; border-radius: 999px; padding: 10px 14px; font-size: 14px; box-shadow: 0 3px 12px rgba(0,0,0,.2); cursor: pointer; }
   .leaflet-control-layers { border-radius: 10px !important; }
+  .autour { margin-bottom: 14px; border-top: 1px solid var(--ligne); padding-top: 12px; }
+  .rayon { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .rayon input { flex: 1; accent-color: var(--foret); }
+  .rayon span { min-width: 54px; text-align: right; font-variant-numeric: tabular-nums; font-size: 13.5px; font-weight: 600; }
+  .aide { font-size: 13px; color: var(--gris); margin: 0; line-height: 1.45; }
+  .resultats ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
+  .resultats button { width: 100%; display: flex; gap: 10px; align-items: center; text-align: left; background: #fff; border: 1px solid var(--ligne);
+    border-radius: 10px; padding: 7px 9px; cursor: pointer; font-size: 13.5px; color: var(--encre); }
+  .resultats button:hover { border-color: var(--mousse); }
+  .resultats .km { color: var(--gris); }
+  .num, .coin span { flex: none; width: 24px; height: 24px; border-radius: 50%; color: #fff; display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 12px; }
+  .coin span { width: 26px; height: 26px; border: 2px solid #fff; box-shadow: 0 1px 5px rgba(0,0,0,.4); }
+  .moi span { display: block; width: 18px; height: 18px; border-radius: 50%; background: #2a6fdb; border: 3px solid #fff;
+    box-shadow: 0 0 0 3px rgba(42,111,219,.3), 0 1px 4px rgba(0,0,0,.3); cursor: grab; }
+  .leaflet-popup-content { font-size: 13.5px; line-height: 1.5; }
+  .leaflet-popup-content a { color: var(--mousse); font-weight: 600; }
   @media (max-width: 640px) {
     .panneau { top: auto; bottom: 0; left: 0; width: 100%; max-height: 62%; border-radius: 16px 16px 0 0; }
     .tete { border-radius: 16px 16px 0 0; padding-top: 12px; }
@@ -98,6 +115,18 @@
     <div class="legende">
       <div class="barre"></div>
       <div class="barre-txt"><span>Favorable</span><span>Très favorable</span></div>
+    </div>
+
+    <div class="autour">
+      <label class="titre">Autour de moi</label>
+      <div class="rayon">
+        <input type="range" id="rayon" min="1" max="100" step="1" value="15" aria-label="Rayon de recherche en kilomètres">
+        <span id="rayon-txt">15 km</span>
+      </div>
+      <div class="resultats" id="resultats">
+        <p class="aide">Touchez « Me localiser » pour voir les meilleurs coins autour de vous. Vous pourrez ensuite déplacer le point bleu,
+        ou faire un clic droit (appui long sur téléphone) pour chercher autour d'un autre endroit.</p>
+      </div>
     </div>
 
     <div class="fiche" id="fiche"></div>
@@ -216,6 +245,8 @@ function afficher() {
     zl.hidden = false;
   }
 
+  if (centre) chercherAutour(false);
+
   document.getElementById("fiche").innerHTML =
     `<h2>${e.nom}</h2><div class="latin">${f.latin}</div>
      <dl><dt>Saison</dt><dd>${f.periode}</dd><dt>Milieu</dt><dd>${f.milieu}</dd><dt>Sol</dt><dd>${f.sol}</dd></dl>
@@ -230,13 +261,115 @@ document.getElementById("plier").onclick = () => {
   document.getElementById("plier").setAttribute("aria-expanded", !plie);
 };
 
-let position = null;
-document.getElementById("localiser").onclick = () => carte.locate({ setView: true, maxZoom: 14 });
-carte.on("locationfound", (ev) => {
-  if (position) carte.removeLayer(position);
-  position = L.circleMarker(ev.latlng, { radius: 8, color: "#fff", weight: 3, fillColor: "#2a6fdb", fillOpacity: 1 }).addTo(carte);
+// ---- Meilleurs coins autour de moi ----
+const NB_COINS = 10;
+const DIRECTIONS = ["au nord", "au nord-est", "à l'est", "au sud-est", "au sud", "au sud-ouest", "à l'ouest", "au nord-ouest"];
+const secteursCharges = {};
+const groupeCoins = L.layerGroup().addTo(carte);
+let centre = null, marqueurMoi = null, cercle = null, rayon = 15, marqueurs = [];
+try { rayon = Math.min(100, Math.max(1, +localStorage.getItem("toads-rayon") || 15)); } catch (e) {}
+const curseur = document.getElementById("rayon"), texteRayon = document.getElementById("rayon-txt");
+curseur.value = rayon; texteRayon.textContent = rayon + " km";
+
+function chargerSecteurs(esp) {
+  if (!secteursCharges[esp]) {
+    secteursCharges[esp] = fetch(`cartes/secteurs_${esp}.json?d=${info.date}`).then((r) => r.json())
+      .catch(() => { delete secteursCharges[esp]; return { jour: [], potentiel: [] }; });
+  }
+  return secteursCharges[esp];
+}
+
+function distanceKm(a, b) {
+  const r = Math.PI / 180, dLat = (b.lat - a.lat) * r, dLon = (b.lng - a.lng) * r;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLon / 2) ** 2;
+  return 12742 * Math.asin(Math.sqrt(h));
+}
+
+function direction(a, b) {
+  const r = Math.PI / 180, y = Math.sin((b.lng - a.lng) * r) * Math.cos(b.lat * r);
+  const x = Math.cos(a.lat * r) * Math.sin(b.lat * r) - Math.sin(a.lat * r) * Math.cos(b.lat * r) * Math.cos((b.lng - a.lng) * r);
+  const cap = (Math.atan2(y, x) / r + 360) % 360;
+  return DIRECTIONS[Math.round(cap / 45) % 8];
+}
+
+const couleurScore = (s) => s >= 75 ? "#6e1a46" : s >= 50 ? "#d9452b" : s >= 30 ? "#e8892f" : "#c9a227";
+const km = (d) => d < 1 ? `${Math.round(d * 1000)} m` : `${d.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} km`;
+
+function placerCentre(latlng, ajuster) {
+  centre = latlng;
+  if (!marqueurMoi) {
+    marqueurMoi = L.marker(latlng, { draggable: true, zIndexOffset: 1000, title: "Votre position (déplaçable)",
+      icon: L.divIcon({ className: "moi", html: "<span></span>", iconSize: [24, 24], iconAnchor: [12, 12] }) }).addTo(carte);
+    marqueurMoi.on("dragend", () => placerCentre(marqueurMoi.getLatLng(), false));
+  } else {
+    marqueurMoi.setLatLng(latlng);
+  }
+  return chercherAutour(ajuster);
+}
+
+async function chercherAutour(ajuster) {
+  if (!centre || !info) return;
+  if (!cercle) cercle = L.circle(centre, { radius: rayon * 1000, color: "#1f3a2b", weight: 1.5, dashArray: "5 6", fill: false, interactive: false }).addTo(carte);
+  cercle.setLatLng(centre); cercle.setRadius(rayon * 1000);
+  if (ajuster) carte.fitBounds(cercle.getBounds(), { padding: [24, 24] });
+
+  const donnees = await chargerSecteurs(espece);
+  const tous = donnees[mode] || [];
+  const proches = [];
+  let plusProche = Infinity;
+  for (const [lat, lng, s] of tous) {
+    const d = distanceKm(centre, { lat, lng });
+    if (d < plusProche) plusProche = d;
+    if (d <= rayon) proches.push({ lat, lng, s, d });
+  }
+  proches.sort((a, b) => b.s - a.s || a.d - b.d);
+  const meilleurs = proches.slice(0, NB_COINS);
+
+  groupeCoins.clearLayers();
+  marqueurs = meilleurs.map((c, i) => {
+    const lien = `https://www.google.com/maps/dir/?api=1&destination=${c.lat},${c.lng}`;
+    return L.marker([c.lat, c.lng], { zIndexOffset: 500 - i,
+      icon: L.divIcon({ className: "coin", html: `<span style="background:${couleurScore(c.s)}">${i + 1}</span>`, iconSize: [30, 30], iconAnchor: [15, 15] }) })
+      .bindPopup(`<b>Coin n° ${i + 1}</b> · score ${c.s}/100<br>${km(c.d)} ${direction(centre, c)}<br><a href="${lien}" target="_blank" rel="noopener">Itinéraire</a>`)
+      .addTo(groupeCoins);
+  });
+
+  const zone = document.getElementById("resultats");
+  const nom = info.especes[espece].nom.toLowerCase();
+  if (!meilleurs.length) {
+    let msg;
+    if (plusProche > 100) msg = "Vous êtes hors de la zone couverte (Alsace, Lorraine, Vosges). Déplacez le point bleu dans la zone.";
+    else if (mode === "jour") msg = `Aucun coin favorable aujourd'hui pour : ${nom}, dans ce rayon. Agrandissez le rayon ou passez en mode « Potentiel ».`;
+    else msg = `Aucun coin favorable pour : ${nom}, dans ce rayon. Agrandissez le rayon.`;
+    zone.innerHTML = `<p class="aide">${msg}</p>`;
+    return;
+  }
+  zone.innerHTML = `<ol>${meilleurs.map((c, i) => `<li><button data-i="${i}"><span class="num" style="background:${couleurScore(c.s)}">${i + 1}</span>` +
+    `<span>Score ${c.s} <span class="km">· ${km(c.d)} ${direction(centre, c)}</span></span></button></li>`).join("")}</ol>`;
+  zone.querySelectorAll("button").forEach((b) => b.onclick = () => {
+    const m = marqueurs[+b.dataset.i];
+    carte.setView(m.getLatLng(), Math.max(carte.getZoom(), 14));
+    m.openPopup();
+  });
+}
+
+curseur.addEventListener("input", () => {
+  rayon = +curseur.value; texteRayon.textContent = rayon + " km";
+  try { localStorage.setItem("toads-rayon", rayon); } catch (e) {}
+  chercherAutour(false);
 });
-carte.on("locationerror", () => alert("Position introuvable : vérifiez que la localisation est autorisée."));
+curseur.addEventListener("change", () => { if (cercle) carte.fitBounds(cercle.getBounds(), { padding: [24, 24] }); });
+
+document.getElementById("localiser").onclick = () => {
+  document.getElementById("resultats").innerHTML = `<p class="aide">Recherche de votre position…</p>`;
+  carte.locate({ setView: false, enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+};
+carte.on("locationfound", (ev) => placerCentre(ev.latlng, true));
+carte.on("locationerror", () => {
+  placerCentre(centre || carte.getCenter(), !centre).then(() => document.getElementById("resultats").insertAdjacentHTML("afterbegin",
+    `<p class="aide" style="margin-bottom:8px">Position introuvable : vérifiez que la localisation est autorisée. En attendant, déplacez le point bleu à l'endroit voulu.</p>`));
+});
+carte.on("contextmenu", (ev) => placerCentre(ev.latlng, false));
 
 fetch("cartes/info.json", { cache: "no-store" })
   .then((r) => r.json())
