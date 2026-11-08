@@ -10,6 +10,8 @@ Résultats :
 - site/cartes/info.json : date, emprise et état des conditions par espèce
 """
 import datetime as dt
+import json
+import os
 from zoneinfo import ZoneInfo
 
 import ephem
@@ -31,8 +33,8 @@ JOURS_PASSES = 30
 GRADIENT_AIR, GRADIENT_SOL = 0.0065, 0.0055
 # Altitudes de calcul : l'indice est calculé à chaque niveau, puis chaque carré prend celui de son altitude
 NIVEAUX = np.arange(100, 1501, 100)
-# Points de contrôle (trouvailles réelles) : leur indice est affiché dans le journal de calcul
-CONTROLES = {"Sandweg, Oberhaslach (cèpes le 7 novembre 2026)": (48.556, 7.315)}
+# Trouvailles personnelles (secret GitHub TROUVAILLES) : leur indice est affiché, sans le lieu
+CONTROLES = [(t["espece"], t["lat"], t["lon"]) for t in json.loads(os.environ.get("TROUVAILLES", "").strip() or "[]")]
 
 
 def points_meteo():
@@ -216,7 +218,7 @@ def main():
     t, w, h, bornes = preparer_mercator()
     lut = table_couleurs()
     infos = {}
-    controles = {nom: case(*pos) for nom, pos in CONTROLES.items()}
+    controles = [(e, case(lat, lon)) for e, lat, lon in CONTROLES]
     for espece, nom in ((k, v["nom"]) for k, v in ESPECES.items()):
         if espece not in scores:
             print(f"{nom} : pas encore de score, ignorée")
@@ -236,9 +238,10 @@ def main():
                          "statut": statut(meilleur, f_saison), "saison": f_saison > 0}
         print(f"{nom} : indice {infos[espece]['indice']} (meilleurs secteurs {infos[espece]['indice_meilleur']}) "
               f"-> {infos[espece]['statut']}")
-        for nom_c, (lc, cc) in controles.items():
-            print(f"  contrôle {nom_c} : indice {ind_grille[lc, cc]:.2f}, potentiel {scores[espece][lc, cc]}, "
-                  f"carte du jour {jour[lc, cc]:.0f}")
+        for n, (e, (lc, cc)) in enumerate(controles, start=1):
+            if e == espece and 0 <= lc < LIGNES and 0 <= cc < COLS:
+                print(f"  trouvaille personnelle n° {n} : indice {ind_grille[lc, cc]:.2f}, potentiel {scores[espece][lc, cc]}, "
+                      f"carte du jour {jour[lc, cc]:.0f}")
 
     with np.errstate(invalid="ignore"):
         tmoy7 = np.nanmean(m["tmoy"][:, -8:-1], axis=1)

@@ -5,16 +5,18 @@
    "presences": 726,
    "temoins": 2763,
    "auc_defaut": 0.588,
-   "auc_appris": 0.609,
-   "retenu": true,
+   "auc_appris": 0.606,
+   "retenu": false,
    "delai": [
     9,
-    18
+    22
    ],
    "tsol": [
-    13,
+    11,
     21
-   ]
+   ],
+   "trouvailles": 1,
+   "reglages_refuses_par_trouvailles": 136
   },
   "girolle": {
    "presences": 536,
@@ -29,7 +31,9 @@
    "tsol": [
     13,
     21
-   ]
+   ],
+   "trouvailles": 0,
+   "reglages_refuses_par_trouvailles": 0
   },
   "trompette": {
    "presences": 101,
@@ -44,7 +48,9 @@
    "tsol": [
     5,
     13
-   ]
+   ],
+   "trouvailles": 0,
+   "reglages_refuses_par_trouvailles": 0
   },
   "chanterelle_tube": {
    "presences": 94,
@@ -59,7 +65,9 @@
    "tsol": [
     3,
     11
-   ]
+   ],
+   "trouvailles": 0,
+   "reglages_refuses_par_trouvailles": 0
   },
   "coulemelle": {
    "presences": 626,
@@ -74,7 +82,9 @@
    "tsol": [
     9,
     15
-   ]
+   ],
+   "trouvailles": 0,
+   "reglages_refuses_par_trouvailles": 0
   },
   "rose_des_pres": {
    "presences": 108,
@@ -89,7 +99,9 @@
    "tsol": [
     13,
     19
-   ]
+   ],
+   "trouvailles": 0,
+   "reglages_refuses_par_trouvailles": 0
   },
   "coprin": {
    "presences": 798,
@@ -104,7 +116,9 @@
    "tsol": [
     7,
     11
-   ]
+   ],
+   "trouvailles": 0,
+   "reglages_refuses_par_trouvailles": 0
   },
   "pied_de_mouton": {
    "presences": 208,
@@ -119,7 +133,9 @@
    "tsol": [
     13,
     19
-   ]
+   ],
+   "trouvailles": 0,
+   "reglages_refuses_par_trouvailles": 0
   }
  }
 }

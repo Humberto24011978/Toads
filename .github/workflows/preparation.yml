@@ -19,6 +19,9 @@ concurrency:
   group: preparation
   cancel-in-progress: false
 
+env:
+  TROUVAILLES: ${{ secrets.TROUVAILLES }}
+
 jobs:
   preparation:
     runs-on: ubuntu-latest

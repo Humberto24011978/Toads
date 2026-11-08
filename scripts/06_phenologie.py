@@ -15,6 +15,7 @@ Résultats :
 import datetime as dt
 import itertools
 import json
+import os
 
 import numpy as np
 import pandas as pd
@@ -30,14 +31,23 @@ ANNEE_MIN = 2010
 TEMOINS_HASARD = 2              # dates au hasard par observation
 MIN_PRESENCES = 60
 GRADIENT_AIR, GRADIENT_SOL = 0.0065, 0.0055
-CONTROLE = {"nom": "Sandweg, Oberhaslach", "espece": "cepe", "lat": 48.556, "lon": 7.315, "date": "2026-11-07"}
+SEUIL_TROUVAILLE = 0.3          # une trouvaille réelle doit ressortir au moins à ce niveau
 
 
-def charger_observations():
-    o = pd.read_csv(DATA / "observations.csv")
-    o["date"] = pd.to_datetime(o["date"], errors="coerce")
-    o = o.dropna(subset=["date"])
-    o = o[(o.date.dt.year >= ANNEE_MIN) & (o.date < pd.Timestamp.today().normalize())]
+def trouvailles():
+    """Trouvailles personnelles, lues dans le secret GitHub TROUVAILLES (jamais écrites dans le dépôt).
+
+    Format : [{"espece": "cepe", "lat": 48.5, "lon": 7.3, "date": "2026-11-07"}, ...]
+    """
+    brut = os.environ.get("TROUVAILLES", "").strip()
+    if not brut:
+        return pd.DataFrame(columns=["espece", "lat", "lon", "date"])
+    t = pd.DataFrame(json.loads(brut))
+    t["date"] = pd.to_datetime(t["date"])
+    return t
+
+
+def preparer(o):
     o["cel_lat"] = (o.lat / CELLULE).round() * CELLULE
     o["cel_lon"] = (o.lon / CELLULE).round() * CELLULE
     o["an"] = o.date.dt.year
@@ -51,7 +61,15 @@ def charger_observations():
     o["alt"] = np.nan
     o.loc[ok, "alt"] = alt[lig[ok], col[ok]]
     o.loc[o.alt <= 0, "alt"] = np.nan
-    return o.drop_duplicates(subset=["espece", "cel_lat", "cel_lon", "date"]).reset_index(drop=True)
+    return o.reset_index(drop=True)
+
+
+def charger_observations():
+    o = pd.read_csv(DATA / "observations.csv")
+    o["date"] = pd.to_datetime(o["date"], errors="coerce")
+    o = o.dropna(subset=["date"])
+    o = o[(o.date.dt.year >= ANNEE_MIN) & (o.date < pd.Timestamp.today().normalize())]
+    return preparer(o).drop_duplicates(subset=["espece", "cel_lat", "cel_lon", "date"]).reset_index(drop=True)
 
 
 def telecharger_meteo(o):
@@ -149,9 +167,11 @@ def grille_params(defaut):
 def main():
     rng = np.random.default_rng(7)
     o = charger_observations()
-    print(f"{len(o)} observations datées depuis {ANNEE_MIN}")
+    t = trouvailles()
+    t = preparer(t) if len(t) else t
+    print(f"{len(o)} observations datées depuis {ANNEE_MIN}, {len(t)} trouvailles personnelles")
     print("Météo historique (archives Open-Meteo)...")
-    meteo = telecharger_meteo(o)
+    meteo = telecharger_meteo(pd.concat([o, t], ignore_index=True) if len(t) else o)
     precedent = json.loads((DATA / "phenologie.json").read_text()) if (DATA / "phenologie.json").exists() else {}
     resultats = {}
     for espece, defaut in im.PARAMS_DEFAUT.items():
@@ -162,6 +182,21 @@ def main():
         y = ech.y.to_numpy()[garder]
         n_pres = int(y.sum())
         a_defaut = auc(indice_sans_saison(espece, defaut, P, T, M), y)
+        # Trouvailles personnelles de cette espèce : garde-fou
+        tr = t[t.espece == espece] if len(t) else t
+        Pt, Tt, Mt, _ = series(meteo, tr) if len(tr) else (None, None, None, [])
+        mois_t = tr.date.dt.month.to_numpy() if len(tr) else []
+
+        def respecte(prm):
+            if Pt is None or len(Pt) == 0:
+                return True
+            sauvegarde = im.PARAMS[espece]
+            im.PARAMS[espece] = prm
+            try:
+                return all(im.indice(espece, Pt[i:i + 1], Tt[i:i + 1], Mt[i:i + 1], int(mois_t[i]))[0] >= SEUIL_TROUVAILLE
+                           for i in range(len(Pt)))
+            finally:
+                im.PARAMS[espece] = sauvegarde
         if n_pres < MIN_PRESENCES:
             print(f"{espece} : {n_pres} présences, trop peu pour apprendre (AUC des réglages de départ {a_defaut:.2f})")
             resultats[espece] = {"presences": n_pres, "auc_defaut": round(a_defaut, 3), "retenu": False}
@@ -172,43 +207,37 @@ def main():
         test_cel = set(rng.choice(uniques, size=len(uniques) // 3, replace=False))
         test = np.array([c in test_cel for c in cel])
         meilleur, a_meilleur = None, -1
+        refuses = 0
         for prm in grille_params(defaut):
+            if not respecte(prm):
+                refuses += 1
+                continue
             a = auc(indice_sans_saison(espece, prm, P[~test], T[~test], M[~test]), y[~test])
             if a > a_meilleur:
                 meilleur, a_meilleur = prm, a
         a_test_appris = auc(indice_sans_saison(espece, meilleur, P[test], T[test], M[test]), y[test])
         a_test_defaut = auc(indice_sans_saison(espece, defaut, P[test], T[test], M[test]), y[test])
-        retenu = a_test_appris >= a_test_defaut + 0.02
+        retenu = a_test_appris >= a_test_defaut + 0.02 and respecte(meilleur)
         resultats[espece] = {
             "presences": n_pres, "temoins": int(len(y) - n_pres),
             "auc_defaut": round(a_test_defaut, 3), "auc_appris": round(a_test_appris, 3), "retenu": bool(retenu),
             "delai": list(meilleur["delai"]), "tsol": list(meilleur["tsol"]),
+            "trouvailles": int(len(tr)), "reglages_refuses_par_trouvailles": refuses,
         }
         print(f"{espece} : {n_pres} présences ; réglages appris : délai {meilleur['delai']} jours, "
               f"sol {meilleur['tsol']} °C ; AUC sur cellules de test {a_test_defaut:.2f} -> {a_test_appris:.2f} "
-              f"({'retenu' if retenu else 'pas assez net, réglages de départ gardés'})")
+              f"({'retenu' if retenu else 'pas assez net, réglages de départ gardés'})"
+              + (f" ; {len(tr)} trouvaille(s) personnelle(s) respectée(s), {refuses} réglages écartés" if len(tr) else ""))
 
     ecrire_json(DATA / "phenologie.json", {"date": dt.date.today().isoformat(), "especes": resultats})
 
-    # Contrôle : la trouvaille du Sandweg doit ressortir comme favorable
-    im.charger_reglages()
-    c = CONTROLE
-    ech = pd.DataFrame([{"cel_lat": round(c["lat"] / CELLULE) * CELLULE, "cel_lon": round(c["lon"] / CELLULE) * CELLULE,
-                         "date": pd.Timestamp(c["date"]), "alt": 380.0}])
-    try:
-        j = get(ARCHIVE, {"latitude": ech.cel_lat[0], "longitude": ech.cel_lon[0], "timezone": "Europe/Paris",
-                          "start_date": (pd.Timestamp(c["date"]) - pd.Timedelta(days=AVANT)).date().isoformat(),
-                          "end_date": c["date"],
-                          "daily": "precipitation_sum,temperature_2m_mean,temperature_2m_min,soil_temperature_0_to_7cm_mean"}).json()
-        d = j["daily"]
-        m = pd.DataFrame({"cel_lat": ech.cel_lat[0], "cel_lon": ech.cel_lon[0], "elev": j.get("elevation", np.nan),
-                          "date": pd.to_datetime(d["time"]), "pluie": d["precipitation_sum"], "tmoy": d["temperature_2m_mean"],
-                          "tmin": d["temperature_2m_min"], "tsol": d["soil_temperature_0_to_7cm_mean"]})
-        P, T, M, _ = series(m, ech)
-        v = im.indice(c["espece"], P, T, M, pd.Timestamp(c["date"]).month)[0]
-        print(f"Contrôle {c['nom']} ({c['espece']}, {c['date']}) : indice {v:.2f}")
-    except Exception as e:  # le contrôle ne doit jamais bloquer la préparation
-        print(f"Contrôle impossible : {e}")
+    # Contrôle final avec les réglages retenus (sans jamais afficher le lieu)
+    im.charger_reglages(DATA / "phenologie.json")
+    for i, tr in enumerate(t.itertuples(), start=1) if len(t) else []:
+        P1, T1, M1, ok = series(meteo, t.iloc[[i - 1]])
+        if len(ok):
+            v = im.indice(tr.espece, P1, T1, M1, tr.date.month)[0]
+            print(f"Trouvaille personnelle n° {i} ({tr.espece}) : indice {v:.2f}")
 
 
 if __name__ == "__main__":
