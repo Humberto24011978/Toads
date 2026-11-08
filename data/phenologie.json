@@ -1,0 +1,125 @@
+{
+ "date": "2026-11-08",
+ "especes": {
+  "cepe": {
+   "presences": 726,
+   "temoins": 2763,
+   "auc_defaut": 0.588,
+   "auc_appris": 0.609,
+   "retenu": true,
+   "delai": [
+    9,
+    18
+   ],
+   "tsol": [
+    13,
+    21
+   ]
+  },
+  "girolle": {
+   "presences": 536,
+   "temoins": 2937,
+   "auc_defaut": 0.55,
+   "auc_appris": 0.601,
+   "retenu": true,
+   "delai": [
+    3,
+    30
+   ],
+   "tsol": [
+    13,
+    21
+   ]
+  },
+  "trompette": {
+   "presences": 101,
+   "temoins": 3121,
+   "auc_defaut": 0.528,
+   "auc_appris": 0.537,
+   "retenu": false,
+   "delai": [
+    9,
+    18
+   ],
+   "tsol": [
+    5,
+    13
+   ]
+  },
+  "chanterelle_tube": {
+   "presences": 94,
+   "temoins": 3081,
+   "auc_defaut": 0.627,
+   "auc_appris": 0.673,
+   "retenu": true,
+   "delai": [
+    5,
+    30
+   ],
+   "tsol": [
+    3,
+    11
+   ]
+  },
+  "coulemelle": {
+   "presences": 626,
+   "temoins": 2761,
+   "auc_defaut": 0.574,
+   "auc_appris": 0.58,
+   "retenu": false,
+   "delai": [
+    9,
+    18
+   ],
+   "tsol": [
+    9,
+    15
+   ]
+  },
+  "rose_des_pres": {
+   "presences": 108,
+   "temoins": 3133,
+   "auc_defaut": 0.488,
+   "auc_appris": 0.58,
+   "retenu": true,
+   "delai": [
+    2,
+    10
+   ],
+   "tsol": [
+    13,
+    19
+   ]
+  },
+  "coprin": {
+   "presences": 798,
+   "temoins": 2748,
+   "auc_defaut": 0.533,
+   "auc_appris": 0.62,
+   "retenu": true,
+   "delai": [
+    3,
+    22
+   ],
+   "tsol": [
+    7,
+    11
+   ]
+  },
+  "pied_de_mouton": {
+   "presences": 208,
+   "temoins": 2946,
+   "auc_defaut": 0.431,
+   "auc_appris": 0.391,
+   "retenu": false,
+   "delai": [
+    5,
+    30
+   ],
+   "tsol": [
+    13,
+    19
+   ]
+  }
+ }
+}
