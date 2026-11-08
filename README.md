@@ -5,7 +5,7 @@ Carte gratuite des zones favorables aux champignons en **Alsace, Lorraine et Vos
 
 **Site :** https://humberto24011978.github.io/Toads/
 
-Espèces : cèpe, girolle, trompette de la mort, chanterelle en tube, coulemelle, rosé des prés, coprin chevelu.
+Espèces : cèpe, girolle, trompette de la mort, chanterelle en tube, coulemelle, rosé des prés, coprin chevelu, pied de mouton.
 
 ## Comment ça marche
 

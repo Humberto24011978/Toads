@@ -33,12 +33,14 @@ SAISON = {
     "coulemelle":       {6: .4, 7: 1, 8: 1, 9: 1, 10: 1, 11: .3},
     "rose_des_pres":    {6: .4, 7: .6, 8: 1, 9: 1, 10: 1, 11: .4},
     "coprin":           {4: .4, 5: .5, 6: .4, 7: .4, 8: .5, 9: 1, 10: 1, 11: 1, 12: .3},
+    "pied_de_mouton":   {7: .3, 8: .6, 9: 1, 10: 1, 11: 1, 12: .6},
 }
 TEMPERATURE = {  # moyenne sur 7 jours idéale (°C)
     "cepe": (10, 20), "girolle": (12, 22), "trompette": (8, 18), "chanterelle_tube": (4, 15),
     "coulemelle": (10, 20), "rose_des_pres": (10, 20), "coprin": (6, 18),
+    "pied_de_mouton": (6, 18),
 }
-RESISTANCE_GEL = {"chanterelle_tube": .7, "trompette": .6}
+RESISTANCE_GEL = {"chanterelle_tube": .7, "trompette": .6, "pied_de_mouton": .6}
 
 
 def dans(v, lo, hi, marge):

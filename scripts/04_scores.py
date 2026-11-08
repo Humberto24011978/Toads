@@ -25,6 +25,8 @@ ARBRES = {
                              douglas_meleze=.2, coniferes=.2, peuplier_robinier=.1, foret_autre=.3, lande=0),
     "chanterelle_tube": dict(chene=.4, hetre=.6, chataignier=.4, feuillus=.4, mixte=.9, sapin_epicea=1, pin=.7,
                              douglas_meleze=.6, coniferes=.8, peuplier_robinier=0, foret_autre=.3, lande=.2),
+    "pied_de_mouton":   dict(chene=.9, hetre=1, chataignier=.7, feuillus=.8, mixte=.9, sapin_epicea=.9, pin=.6,
+                             douglas_meleze=.5, coniferes=.7, peuplier_robinier=.1, foret_autre=.4, lande=.1),
 }
 
 # Affinité des espèces de prairie pour chaque milieu ouvert (0 à 1)
@@ -43,6 +45,7 @@ SOL_ALT = {
     "coulemelle":       dict(ph=(4.5, 8.0), alt=(100, 1100)),
     "rose_des_pres":    dict(ph=(5.5, 8.0), alt=(100, 1100)),
     "coprin":           dict(ph=(5.5, 8.5), alt=(100, 1000)),
+    "pied_de_mouton":   dict(ph=(4.5, 7.5), alt=(100, 1300)),
 }
 
 VARIABLES_OCC = ["chene", "hetre", "chataignier", "feuillus", "mixte", "sapin_epicea", "pin", "douglas_meleze",
