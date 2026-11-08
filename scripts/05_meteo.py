@@ -190,6 +190,9 @@ def main():
     lut = table_couleurs()
     infos = {}
     for espece, nom in ((k, v["nom"]) for k, v in ESPECES.items()):
+        if espece not in scores:
+            print(f"{nom} : pas encore de score, ignorée")
+            continue
         ind = indice(espece, r, mois)
         ind_grille = np.clip(vers_grille(ind, m["forme"]), 0, 1)
         jour = scores[espece].astype("float32") * ind_grille

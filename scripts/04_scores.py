@@ -36,16 +36,18 @@ MILIEUX = {
     "coprin":        dict(prairie=.9, espace_vert=1, agri_naturel=.6, pelouse=.5, urbain=.15),
 }
 
-# pH préféré, altitude préférée (m)
+# pH préféré (avec la marge au-delà de laquelle il ne convient plus), altitude préférée (m).
+# Les valeurs de SoilGrids sont lissées : en forêt elles vont d'environ 5,0 (grès des Vosges)
+# à 6,5 (calcaires lorrains). Les seuils sont réglés sur cette échelle.
 SOL_ALT = {
-    "cepe":             dict(ph=(3.8, 6.5), alt=(100, 1200)),
-    "girolle":          dict(ph=(3.5, 6.0), alt=(100, 1200)),
-    "trompette":        dict(ph=(5.0, 8.0), alt=(100, 1000)),
-    "chanterelle_tube": dict(ph=(3.5, 5.5), alt=(250, 1350)),
-    "coulemelle":       dict(ph=(4.5, 8.0), alt=(100, 1100)),
-    "rose_des_pres":    dict(ph=(5.5, 8.0), alt=(100, 1100)),
-    "coprin":           dict(ph=(5.5, 8.5), alt=(100, 1000)),
-    "pied_de_mouton":   dict(ph=(4.5, 7.5), alt=(100, 1300)),
+    "cepe":             dict(ph=(3.5, 5.5), marge=1.2, alt=(100, 1200)),
+    "girolle":          dict(ph=(3.5, 5.4), marge=1.1, alt=(100, 1200)),
+    "trompette":        dict(ph=(5.8, 8.5), marge=0.9, alt=(100, 1000)),
+    "chanterelle_tube": dict(ph=(3.5, 5.3), marge=0.9, alt=(300, 1350)),
+    "coulemelle":       dict(ph=(4.5, 8.0), marge=1.0, alt=(100, 1100)),
+    "rose_des_pres":    dict(ph=(5.7, 8.5), marge=0.8, alt=(100, 1100)),
+    "coprin":           dict(ph=(5.6, 8.5), marge=0.8, alt=(100, 1000)),
+    "pied_de_mouton":   dict(ph=(5.2, 6.8), marge=0.8, alt=(100, 1300)),
 }
 
 VARIABLES_OCC = ["chene", "hetre", "chataignier", "feuillus", "mixte", "sapin_epicea", "pin", "douglas_meleze",
@@ -53,6 +55,11 @@ VARIABLES_OCC = ["chene", "hetre", "chataignier", "feuillus", "mixte", "sapin_ep
                  "transition", "cultures", "espace_vert", "urbain", "lisiere"]
 VARIABLES_RELIEF = ["altitude", "pente", "nordicite", "ph"]
 MIN_OBS = 25
+# Si une espèce a trop peu d'observations, on apprend sur celles de son groupe
+GROUPES = {
+    "foret": ["cepe", "girolle", "trompette", "chanterelle_tube", "pied_de_mouton"],
+    "prairie": ["coulemelle", "rose_des_pres", "coprin"],
+}
 
 
 def dans(v, lo, hi, marge):
@@ -67,16 +74,16 @@ def score_regles(espece, occ, rel):
     alt = rel["altitude"].astype("float32")
     if espece in ARBRES:
         hab = sum(a * f[cat] for cat, a in ARBRES[espece].items())
-        hab = np.clip(hab / 0.6, 0, 1)                       # 60 % de bon peuplement suffit
+        hab = np.clip(hab / 0.8, 0, 1)                       # 80 % de bon peuplement suffit
     else:
         hab = sum(a * f[m] for m, a in MILIEUX[espece].items())
         hab = np.clip(hab / 0.5, 0, 1)
         if espece == "coulemelle":                           # elle adore les lisières
             hab = 0.5 * hab + 0.5 * np.clip(f["lisiere"] / 0.12, 0, 1)
     p = SOL_ALT[espece]
-    f_ph = dans(ph, *p["ph"], 1.0)
+    f_ph = dans(ph, *p["ph"], p["marge"])
     f_alt = dans(alt, *p["alt"], 250)
-    return hab * (0.4 + 0.6 * f_ph) * f_alt
+    return hab * (0.3 + 0.7 * f_ph) * f_alt
 
 
 def cases_observations(obs):
@@ -116,36 +123,46 @@ def main():
         regles = score_regles(espece, occ, rel).ravel()[zone]
         presences = np.unique(obs.loc[obs.espece == espece, "case"])
         n = len(presences)
-        if n >= MIN_OBS:
+        source = "espèce"
+        if n < MIN_OBS:
+            groupe = next(g for g, membres in GROUPES.items() if espece in membres)
+            presences = np.unique(obs.loc[obs.espece.isin(GROUPES[groupe]), "case"])
+            source = f"groupe {groupe}"
+        if len(presences) >= MIN_OBS:
+            n_app = len(presences)
             # Fond : carrés au hasard + carrés où d'autres espèces ont été vues
             # (cela compense le fait que les gens observent surtout près des chemins)
             autres = np.unique(obs.loc[obs.espece != espece, "case"])
             autres = np.setdiff1d(autres, presences)
-            hasard = rng.choice(zone, size=min(len(zone), max(5000, 10 * n)), replace=False)
+            hasard = rng.choice(zone, size=min(len(zone), max(5000, 10 * n_app)), replace=False)
             fond = np.setdiff1d(np.union1d(hasard, autres), presences)
             lignes = np.concatenate([pos[presences], pos[fond]])
-            y = np.concatenate([np.ones(n), np.zeros(len(fond))])
+            y = np.concatenate([np.ones(n_app), np.zeros(len(fond))])
             rf = RandomForestClassifier(n_estimators=300, min_samples_leaf=3, max_features="sqrt",
                                         class_weight="balanced_subsample", n_jobs=-1, random_state=42)
             rf.fit(X[lignes], y)
-            modele = rang(rf.predict_proba(X)[:, 1])
-            final = regles * (0.5 + 0.5 * modele)
+            proba = rf.predict_proba(X)[:, 1]
+            # Le modèle départage les carrés où l'habitat existe déjà
+            habitat = regles > 0.05
+            modele = np.zeros(len(zone))
+            modele[habitat] = rang(proba[habitat])
+            final = regles * (0.2 + 0.8 * modele)
             importances = sorted(zip(rf.feature_importances_, VARIABLES_OCC + VARIABLES_RELIEF), reverse=True)[:5]
             info_modele = [nom for _, nom in importances]
         else:
             final = regles * 0.75
             info_modele = None
-        # Mise à l'échelle : les 1 % meilleurs carrés atteignent 100
-        positifs = final[final > 0]
-        ref = np.percentile(positifs, 99) if len(positifs) else 1
-        score = np.clip(final / max(ref, 1e-6), 0, 1) * 100
+        # Mise à l'échelle : les 2 % meilleurs carrés de la zone atteignent 100,
+        # puis une courbe accentue les écarts pour ne garder en couleur vive que le meilleur
+        ref = np.percentile(final, 98)
+        score = np.clip(final / max(ref, 1e-6), 0, 1) ** 1.6 * 100
         grille = np.zeros(LIGNES * COLS, dtype="float32")
         grille[zone] = score
         resultats[espece] = np.rint(grille.reshape(LIGNES, COLS))
-        resume[espece] = {"observations": int(n), "modele": info_modele is not None,
+        resume[espece] = {"observations": int(n), "modele": source if info_modele else None,
                           "variables_cles": info_modele,
                           "part_favorable": round(float((score >= 50).mean() * 100), 1)}
-        print(f"{infos['nom']} : {n} carrés observés, modèle {'oui' if info_modele else 'non'}, "
+        print(f"{infos['nom']} : {n} carrés observés, modèle {source if info_modele else 'aucun'}, "
               f"{resume[espece]['part_favorable']} % de la zone favorable")
         if info_modele:
             print(f"  variables les plus utiles : {', '.join(info_modele)}")
