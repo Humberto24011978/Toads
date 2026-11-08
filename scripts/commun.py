@@ -43,7 +43,7 @@ ESPECES = {
 }
 
 SESSION = requests.Session()
-SESSION.headers["User-Agent"] = "Toads-coins-champignons/1.0 (github.com/Humberto24011978/Toads)"
+SESSION.headers["User-Agent"] = "Toads/1.0"
 
 
 def get(url, params=None, essais=6, timeout=180):
