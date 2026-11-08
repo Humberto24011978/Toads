@@ -1,6 +1,6 @@
 {
  "cepe": {
-  "observations": 100,
+  "observations": 102,
   "modele": "espèce",
   "variables_cles": [
    "ph",
@@ -9,31 +9,31 @@
    "pente",
    "nordicite"
   ],
-  "part_favorable": 19.3
+  "part_favorable": 19.6
  },
  "girolle": {
-  "observations": 59,
+  "observations": 61,
   "modele": "espèce",
   "variables_cles": [
    "ph",
    "altitude",
    "pente",
    "foret",
-   "mixte"
+   "tpi"
   ],
-  "part_favorable": 15.0
+  "part_favorable": 16.7
  },
  "trompette": {
-  "observations": 19,
+  "observations": 20,
   "modele": "groupe foret",
   "variables_cles": [
    "ph",
-   "foret",
    "altitude",
+   "foret",
    "pente",
    "nordicite"
   ],
-  "part_favorable": 14.7
+  "part_favorable": 12.3
  },
  "chanterelle_tube": {
   "observations": 38,
@@ -45,19 +45,19 @@
    "altitude",
    "nordicite"
   ],
-  "part_favorable": 9.8
+  "part_favorable": 9.9
  },
  "coulemelle": {
-  "observations": 114,
+  "observations": 115,
   "modele": "espèce",
   "variables_cles": [
    "altitude",
    "ph",
-   "pente",
    "nordicite",
-   "foret"
+   "pente",
+   "tpi"
   ],
-  "part_favorable": 7.8
+  "part_favorable": 5.1
  },
  "rose_des_pres": {
   "observations": 9,
@@ -67,32 +67,32 @@
    "nordicite",
    "pente",
    "ph",
-   "cultures"
+   "tpi"
   ],
-  "part_favorable": 9.3
+  "part_favorable": 8.3
  },
  "coprin": {
-  "observations": 108,
+  "observations": 107,
   "modele": "espèce",
   "variables_cles": [
-   "nordicite",
    "altitude",
+   "nordicite",
    "pente",
-   "cultures",
+   "tpi",
    "ph"
   ],
-  "part_favorable": 9.5
+  "part_favorable": 7.1
  },
  "pied_de_mouton": {
-  "observations": 41,
+  "observations": 44,
   "modele": "espèce",
   "variables_cles": [
-   "foret",
    "ph",
-   "altitude",
    "pente",
+   "foret",
+   "altitude",
    "nordicite"
   ],
-  "part_favorable": 20.7
+  "part_favorable": 22.1
  }
 }
