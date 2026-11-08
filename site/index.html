@@ -59,6 +59,19 @@
   .pied a { color: var(--mousse); }
   .localiser { position: fixed; z-index: 1000; right: 16px; bottom: 28px; background: #fff; border: 0; border-radius: 999px; padding: 10px 14px; font-size: 14px; box-shadow: 0 3px 12px rgba(0,0,0,.2); cursor: pointer; }
   .leaflet-control-layers { border-radius: 10px !important; }
+  .avenir { background: #fff7e8; border: 1px solid #f0d9a8; border-radius: 12px; padding: 10px 12px; margin-bottom: 14px; }
+  .avenir h3 { margin: 0 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: .5px; color: #8a5a12; }
+  .avenir button { display: block; width: 100%; text-align: left; background: none; border: 0; padding: 4px 0; font-size: 13.5px; color: var(--encre); cursor: pointer; line-height: 1.4; }
+  .avenir button:hover { text-decoration: underline; }
+  .jours { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; margin-bottom: 6px; }
+  .jours button { border: 1px solid var(--ligne); background: #fff; border-radius: 9px; padding: 5px 0 4px; cursor: pointer; display: flex; flex-direction: column;
+    align-items: center; gap: 3px; font-size: 11px; color: var(--gris); min-width: 0; }
+  .jours button[aria-pressed="true"] { border-color: var(--foret); box-shadow: inset 0 0 0 1px var(--foret); color: var(--encre); font-weight: 600; }
+  .jours button.tendance { border-style: dashed; }
+  .jours .colonne { width: 10px; height: 34px; background: #efe8d9; border-radius: 3px; display: flex; align-items: flex-end; overflow: hidden; }
+  .jours .colonne span { width: 100%; border-radius: 3px; }
+  .jours .val { font-variant-numeric: tabular-nums; }
+  .jours-legende { font-size: 11.5px; color: var(--gris); margin: 0 0 14px; line-height: 1.4; }
   .autour { margin-bottom: 14px; border-top: 1px solid var(--ligne); padding-top: 12px; }
   .rayon { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
   .rayon input { flex: 1; accent-color: var(--foret); }
@@ -97,12 +110,19 @@
     <button class="plier" id="plier" aria-expanded="true">Masquer</button>
   </div>
   <div class="corps">
+    <div class="avenir" id="avenir" hidden></div>
+
     <label class="titre">Espèce</label>
     <div class="especes" id="especes"></div>
 
     <div class="bascule" role="group" aria-label="Type de carte">
-      <button id="mode-jour" aria-pressed="true">Aujourd'hui</button>
+      <button id="mode-jour" aria-pressed="true">Prévisions</button>
       <button id="mode-potentiel" aria-pressed="false">Potentiel</button>
+    </div>
+
+    <div id="bloc-jours" hidden>
+      <div class="jours" id="jours" role="group" aria-label="Jour affiché"></div>
+      <p class="jours-legende" id="jours-legende"></p>
     </div>
 
     <div class="etat" id="etat">
@@ -188,7 +208,7 @@ const fonds = {
 fonds["Plan IGN"].addTo(carte);
 L.control.layers(fonds, null, { position: "topright" }).addTo(carte);
 
-let info = null, couche = null, espece = "cepe", mode = "jour";
+let info = null, couche = null, espece = "cepe", mode = "jour", jourSel = 0;
 try { espece = localStorage.getItem("toads-espece") || espece; mode = localStorage.getItem("toads-mode") || mode; } catch (e) {}
 
 function boutonsEspeces() {
@@ -207,22 +227,78 @@ function enregistrer() {
   try { localStorage.setItem("toads-espece", espece); localStorage.setItem("toads-mode", mode); } catch (e) {}
 }
 
+const couleurValeur = (v) => v >= 75 ? "#6e1a46" : v >= 50 ? "#d9452b" : v >= 25 ? "#e8892f" : v >= 10 ? "#e8c547" : "#d8d0bf";
+function jourCourt(iso, k) {
+  if (k === 0) return "Auj.";
+  if (k === 1) return "Dem.";
+  return new Date(iso + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "short" }).replace(".", "") + " " + +iso.slice(8);
+}
+const prevEspece = (esp) => info.previsions && info.previsions.especes[esp];
+
+function afficherAvenir() {
+  const zone = document.getElementById("avenir");
+  if (!info.previsions) { zone.hidden = true; return; }
+  const dates = info.previsions.dates, lignes = [];
+  for (const [cle, p] of Object.entries(info.previsions.especes)) {
+    const v = p.zone, max = Math.max(...v.slice(1)), k = v.indexOf(max, 1);
+    const nom = info.especes[cle] ? info.especes[cle].nom : cle;
+    if (v[0] >= 60) lignes.push({ cle, k: 0, force: v[0], txt: `<b>${nom}</b> : bon moment dès maintenant` });
+    else if (max >= 60 && max - v[0] >= 20) {
+      const quand = k === 1 ? "dès demain" : "vers " + new Date(dates[k] + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric" });
+      lignes.push({ cle, k, force: max, txt: `<b>${nom}</b> : poussée ${max >= 75 ? "forte " : ""}probable ${quand}${k >= 4 ? " (tendance)" : ""}` });
+    }
+  }
+  if (!lignes.length) { zone.hidden = true; return; }
+  lignes.sort((a, b) => b.force - a.force);
+  zone.innerHTML = `<h3>À venir ${info.previsions.zone.nom} (${info.previsions.zone.rayon_km} km)</h3>` +
+    lignes.slice(0, 5).map((l) => `<button data-e="${l.cle}" data-k="${l.k}">${l.txt}</button>`).join("");
+  zone.querySelectorAll("button").forEach((b) => b.onclick = () => { espece = b.dataset.e; mode = "jour"; jourSel = +b.dataset.k; enregistrer(); afficher(); });
+  zone.hidden = false;
+}
+
+function afficherJours() {
+  const bloc = document.getElementById("bloc-jours"), p = prevEspece(espece);
+  if (mode !== "jour" || !p) { bloc.hidden = true; return; }
+  const dates = info.previsions.dates;
+  document.getElementById("jours").innerHTML = dates.map((d, k) => {
+    const v = p.zone[k];
+    return `<button data-k="${k}" aria-pressed="${k === jourSel}" class="${k >= 4 ? "tendance" : ""}" title="${dateFr(d)} : ${v}/100">` +
+      `<span>${jourCourt(d, k)}</span><span class="colonne"><span style="height:${Math.max(4, v)}%;background:${couleurValeur(v)}"></span></span>` +
+      `<span class="val">${v}</span></button>`;
+  }).join("");
+  document.querySelectorAll("#jours button").forEach((b) => b.onclick = () => { jourSel = +b.dataset.k; afficher(); });
+  document.getElementById("jours-legende").textContent =
+    `Chances de pousse dans les meilleurs coins ${info.previsions.zone.nom} (${info.previsions.zone.rayon_km} km), sur 100. ` +
+    "Fiable sur 3 jours ; au-delà (cadres en pointillés), c'est une tendance.";
+  bloc.hidden = false;
+}
+
 function dateFr(iso) {
   return new Date(iso + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
 }
 
 function afficher() {
   if (!info.especes[espece]) espece = Object.keys(info.especes)[0];
-  const e = info.especes[espece], f = FICHES[espece], m = info.meteo;
+  const e = info.especes[espece], f = FICHES[espece], m = info.meteo, p = prevEspece(espece);
+  if (!p) jourSel = 0;
   boutonsEspeces();
+  afficherAvenir();
+  afficherJours();
   document.getElementById("mode-jour").setAttribute("aria-pressed", mode === "jour");
   document.getElementById("mode-potentiel").setAttribute("aria-pressed", mode === "potentiel");
 
   if (couche) carte.removeLayer(couche);
-  couche = L.imageOverlay(`cartes/${espece}_${mode}.png?d=${info.date}`, info.bornes, { opacity: 0.85, interactive: false }).addTo(carte);
+  const fichier = mode === "potentiel" ? `${espece}_potentiel` : (p ? `${espece}_j${jourSel}` : `${espece}_jour`);
+  couche = L.imageOverlay(`cartes/${fichier}.png?d=${info.date}`, info.bornes, { opacity: 0.85, interactive: false }).addTo(carte);
 
   const etat = document.getElementById("etat");
-  if (mode === "jour") {
+  if (mode === "jour" && jourSel > 0 && p) {
+    const st = p.statut[jourSel];
+    etat.querySelector(".statut").innerHTML = `<span class="pt" style="background:${COULEURS[st]}"></span><span>${st.charAt(0).toUpperCase() + st.slice(1)}</span>`;
+    etat.querySelector(".detail").textContent = `Prévision pour ${dateFr(info.previsions.dates[jourSel])}` +
+      (jourSel >= 4 ? " (simple tendance à cette distance)" : "") +
+      `. Pluie prévue sur les 7 prochains jours : ${m.pluie_prevue_7j_mm ?? "?"} mm. La carte montre les coins favorables ce jour-là.`;
+  } else if (mode === "jour") {
     etat.querySelector(".statut").innerHTML = `<span class="pt" style="background:${COULEURS[e.statut]}"></span><span>${e.statut.charAt(0).toUpperCase() + e.statut.slice(1)}</span>`;
     let d = `Mise à jour ${dateFr(info.date)}. Pluie sur 14 jours : ${m.pluie_14j_mm} mm, température moyenne sur 7 jours : ${m.temperature_7j} °C` +
       (m.temperature_sol_7j != null ? ` (sol : ${m.temperature_sol_7j} °C)` : "");
@@ -273,11 +349,12 @@ const curseur = document.getElementById("rayon"), texteRayon = document.getEleme
 curseur.value = rayon; texteRayon.textContent = rayon + " km";
 
 function chargerSecteurs(esp) {
-  if (!secteursCharges[esp]) {
-    secteursCharges[esp] = fetch(`cartes/secteurs_${esp}.json?d=${info.date}`).then((r) => r.json())
-      .catch(() => { delete secteursCharges[esp]; return { jour: [], potentiel: [] }; });
+  const nomFichier = mode === "potentiel" ? `${esp}_potentiel` : `${esp}_j${prevEspece(esp) ? jourSel : 0}`;
+  if (!secteursCharges[nomFichier]) {
+    secteursCharges[nomFichier] = fetch(`cartes/secteurs_${nomFichier}.json?d=${info.date}`).then((r) => r.json())
+      .catch(() => { delete secteursCharges[nomFichier]; return []; });
   }
-  return secteursCharges[esp];
+  return secteursCharges[nomFichier];
 }
 
 function distanceKm(a, b) {
@@ -315,7 +392,7 @@ async function chercherAutour(ajuster) {
   if (ajuster) carte.fitBounds(cercle.getBounds(), { padding: [24, 24] });
 
   const donnees = await chargerSecteurs(espece);
-  const tous = donnees[mode] || [];
+  const tous = Array.isArray(donnees) ? donnees : (donnees[mode] || []);
   const proches = [];
   let plusProche = Infinity;
   for (const [lat, lng, s] of tous) {
@@ -340,7 +417,7 @@ async function chercherAutour(ajuster) {
   if (!meilleurs.length) {
     let msg;
     if (plusProche > 100) msg = "Vous êtes hors de la zone couverte (Alsace, Lorraine, Vosges). Déplacez le point bleu dans la zone.";
-    else if (mode === "jour") msg = `Aucun coin favorable aujourd'hui pour : ${nom}, dans ce rayon. Agrandissez le rayon ou passez en mode « Potentiel ».`;
+    else if (mode === "jour") msg = `Aucun coin favorable ${jourSel === 0 ? "aujourd'hui" : "ce jour-là"} pour : ${nom}, dans ce rayon. Agrandissez le rayon, choisissez un autre jour ou passez en mode « Potentiel ».`;
     else msg = `Aucun coin favorable pour : ${nom}, dans ce rayon. Agrandissez le rayon.`;
     zone.innerHTML = `<p class="aide">${msg}</p>`;
     return;

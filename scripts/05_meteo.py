@@ -29,6 +29,9 @@ from commun import (BBOX, COLS, CRS, DATA, ESPECES, LIGNES, PAS, SITE, TRANSFORM
 API = "https://api.open-meteo.com/v1/forecast"
 PAS_METEO = (0.15, 0.12)  # degrés (lon, lat) : environ 11 x 13 km
 JOURS_PASSES = 30
+JOURS_PREVUS = 7                 # prévisions : aujourd'hui + 7 jours
+# Zone surveillée pour les prévisions (centre, rayon)
+ZONE = {"nom": "autour de Marlenheim", "lat": 48.621, "lon": 7.491, "rayon_km": 40}
 # Baisse de température avec l'altitude (°C par mètre)
 GRADIENT_AIR, GRADIENT_SOL = 0.0065, 0.0055
 # Altitudes de calcul : l'indice est calculé à chaque niveau, puis chaque carré prend celui de son altitude
@@ -54,7 +57,7 @@ def meteo():
             "latitude": ",".join(f"{p[1]:.3f}" for p in lot),
             # Même variable de sol que les archives utilisées pour l'apprentissage (06_phenologie.py)
             "daily": "precipitation_sum,temperature_2m_mean,temperature_2m_min,soil_temperature_0_to_7cm_mean",
-            "past_days": JOURS_PASSES, "forecast_days": 1, "timezone": "Europe/Paris",
+            "past_days": JOURS_PASSES, "forecast_days": JOURS_PREVUS + 1, "timezone": "Europe/Paris",
         }).json()
         data = data if isinstance(data, list) else [data]
         for d in data:
@@ -79,19 +82,29 @@ def vers_grille(valeurs, forme):
     return dst
 
 
-def indice_grille(espece, m, mois, altitude):
-    """Indice sur la grille de 250 m, en tenant compte de l'altitude de chaque carré."""
+def interpolation_altitude(altitude):
+    """Prépare le passage des niveaux d'altitude de calcul à l'altitude de chaque carré."""
+    pos = np.clip((altitude - NIVEAUX[0]) / (NIVEAUX[1] - NIVEAUX[0]), 0, len(NIVEAUX) - 1)
+    bas = np.floor(pos).astype(int)
+    return bas, np.minimum(bas + 1, len(NIVEAUX) - 1), (pos - bas).astype("float32"), np.indices(altitude.shape)
+
+
+def series_jour(m, k):
+    """Les 31 jours qui se terminent au jour k (0 = aujourd'hui, 1 = demain...)."""
+    i = JOURS_PASSES + k
+    return m["pluie"][:, i - 30:i + 1], m["tsol"][:, i - 30:i + 1], m["tmin"][:, i - 30:i + 1]
+
+
+def indice_grille(espece, m, k, mois, interp):
+    """Indice du jour k sur la grille de 250 m, en tenant compte de l'altitude de chaque carré."""
+    pluie, tsol, tmin = series_jour(m, k)
     niveaux = []
     for z in NIVEAUX:
         ecart = (m["alt"] - z)[:, None]
-        ind = im.indice(espece, m["pluie"], m["tsol"] + GRADIENT_SOL * ecart, m["tmin"] + GRADIENT_AIR * ecart, mois)
+        ind = im.indice(espece, pluie, tsol + GRADIENT_SOL * ecart, tmin + GRADIENT_AIR * ecart, mois)
         niveaux.append(vers_grille(ind, m["forme"]))
     niveaux = np.stack(niveaux)
-    pos = np.clip((altitude - NIVEAUX[0]) / (NIVEAUX[1] - NIVEAUX[0]), 0, len(NIVEAUX) - 1)
-    bas = np.floor(pos).astype(int)
-    haut = np.minimum(bas + 1, len(NIVEAUX) - 1)
-    f = pos - bas
-    lig, col = np.indices(altitude.shape)
+    bas, haut, f, (lig, col) = interp
     return np.clip(niveaux[bas, lig, col] * (1 - f) + niveaux[haut, lig, col] * f, 0, 1)
 
 
@@ -189,19 +202,75 @@ def case(lat, lon):
     return int((Y1 - y) // PAS), int((x - X0) // PAS)
 
 
+def masque_zone(masque):
+    lig, col = np.indices(masque.shape)
+    x = X0 + (col + 0.5) * PAS
+    y = Y1 - (lig + 0.5) * PAS
+    cx, cy = Transformer.from_crs(4326, CRS, always_xy=True).transform(ZONE["lon"], ZONE["lat"])
+    return masque & ((x - cx) ** 2 + (y - cy) ** 2 <= (ZONE["rayon_km"] * 1000) ** 2)
+
+
+def niveau(ind_grille, potentiel, zone):
+    """Indice des meilleurs secteurs d'une zone (90e centile parmi les carrés à bon potentiel)."""
+    bons = zone & (potentiel >= 50)
+    valeurs = ind_grille[bons] if bons.sum() >= 20 else ind_grille[zone]
+    return float(np.mean(valeurs)), float(np.percentile(valeurs, 90))
+
+
 def main():
     if not (DATA / "scores.tif").exists():
         print("Pas encore de scores : lancez d'abord la préparation des données.")
         return
     scores = lire_bandes(DATA / "scores.tif")
     masque = lire_bandes(DATA / "occupation.tif")["masque"] > 0
+    zone = masque_zone(masque)
     altitude = lire_bandes(DATA / "relief_sol.tif")["altitude"].astype("float32")
+    interp = interpolation_altitude(altitude)
     aujourdhui = dt.datetime.now(ZoneInfo("Europe/Paris")).date()
-    mois = aujourdhui.month
-    print(f"Météo du {aujourdhui}...")
+    dates = [aujourdhui + dt.timedelta(days=k) for k in range(JOURS_PREVUS + 1)]
+    print(f"Météo du {aujourdhui} et prévisions à {JOURS_PREVUS} jours...")
     m = meteo()
 
-    # Points météo situés dans la zone, pour l'état régional
+    sortie = SITE / "cartes"
+    sortie.mkdir(parents=True, exist_ok=True)
+    for vieux in sortie.glob("*.png"):
+        vieux.unlink()
+    for vieux in sortie.glob("secteurs_*.json"):
+        vieux.unlink()
+    t, w, h, bornes = preparer_mercator()
+    lut = table_couleurs()
+    infos, previsions = {}, {}
+    controles = [(e, case(lat, lon)) for e, lat, lon in CONTROLES]
+    for espece, nom in ((k, v["nom"]) for k, v in ESPECES.items()):
+        if espece not in scores:
+            print(f"{nom} : pas encore de score, ignorée")
+            continue
+        potentiel = scores[espece]
+        image(potentiel, t, w, h, lut, sortie / f"{espece}_potentiel.png")
+        ecrire_json(sortie / f"secteurs_{espece}_potentiel.json", secteurs(potentiel, 35))
+        prev = {"zone": [], "region": [], "statut": []}
+        for k, jour_k in enumerate(dates):
+            ind_grille = indice_grille(espece, m, k, jour_k.month, interp)
+            carte = potentiel.astype("float32") * ind_grille
+            image(carte, t, w, h, lut, sortie / f"{espece}_j{k}.png")
+            ecrire_json(sortie / f"secteurs_{espece}_j{k}.json", secteurs(carte, 15))
+            moy_r, p90_r = niveau(ind_grille, potentiel, masque)
+            _, p90_z = niveau(ind_grille, potentiel, zone)
+            f_saison = im.SAISON[espece].get(jour_k.month, 0)
+            prev["zone"].append(round(p90_z * 100))
+            prev["region"].append(round(p90_r * 100))
+            prev["statut"].append(statut(p90_r, f_saison))
+            if k == 0:
+                infos[espece] = {"nom": nom, "indice": round(moy_r * 100), "indice_meilleur": round(p90_r * 100),
+                                 "statut": statut(p90_r, f_saison), "saison": f_saison > 0}
+                for n, (e, (lc, cc)) in enumerate(controles, start=1):
+                    if e == espece and 0 <= lc < LIGNES and 0 <= cc < COLS:
+                        print(f"  trouvaille personnelle n° {n} : indice {ind_grille[lc, cc]:.2f}, "
+                              f"potentiel {potentiel[lc, cc]}, carte du jour {carte[lc, cc]:.0f}")
+        previsions[espece] = prev
+        print(f"{nom} : aujourd'hui {infos[espece]['statut']} ; région {prev['region']} ; {ZONE['nom']} {prev['zone']}")
+
+    # Résumé météo des points dans la zone couverte (aujourd'hui = colonne JOURS_PASSES)
     lons, lats = points_meteo()
     lon_g, lat_g = np.meshgrid(lons, lats)
     x, y = Transformer.from_crs(4326, CRS, always_xy=True).transform(lon_g.ravel(), lat_g.ravel())
@@ -212,55 +281,29 @@ def main():
     dans_zone[ok] = masque[li[ok], c[ok]]
     if not dans_zone.any():
         dans_zone[:] = True
-
-    sortie = SITE / "cartes"
-    sortie.mkdir(parents=True, exist_ok=True)
-    t, w, h, bornes = preparer_mercator()
-    lut = table_couleurs()
-    infos = {}
-    controles = [(e, case(lat, lon)) for e, lat, lon in CONTROLES]
-    for espece, nom in ((k, v["nom"]) for k, v in ESPECES.items()):
-        if espece not in scores:
-            print(f"{nom} : pas encore de score, ignorée")
-            continue
-        ind_grille = indice_grille(espece, m, mois, altitude)
-        jour = scores[espece].astype("float32") * ind_grille
-        image(jour, t, w, h, lut, sortie / f"{espece}_jour.png")
-        image(scores[espece], t, w, h, lut, sortie / f"{espece}_potentiel.png")
-        ecrire_json(sortie / f"secteurs_{espece}.json", {
-            "jour": secteurs(jour, 15), "potentiel": secteurs(scores[espece], 35)})
-        # État régional : indice des carrés de la zone où l'espèce a un bon potentiel
-        bons = masque & (scores[espece] >= 50)
-        valeurs = ind_grille[bons] if bons.any() else ind_grille[masque]
-        regional, meilleur = float(np.mean(valeurs)), float(np.percentile(valeurs, 90))
-        f_saison = im.SAISON[espece].get(mois, 0)
-        infos[espece] = {"nom": nom, "indice": round(regional * 100), "indice_meilleur": round(meilleur * 100),
-                         "statut": statut(meilleur, f_saison), "saison": f_saison > 0}
-        print(f"{nom} : indice {infos[espece]['indice']} (meilleurs secteurs {infos[espece]['indice_meilleur']}) "
-              f"-> {infos[espece]['statut']}")
-        for n, (e, (lc, cc)) in enumerate(controles, start=1):
-            if e == espece and 0 <= lc < LIGNES and 0 <= cc < COLS:
-                print(f"  trouvaille personnelle n° {n} : indice {ind_grille[lc, cc]:.2f}, potentiel {scores[espece][lc, cc]}, "
-                      f"carte du jour {jour[lc, cc]:.0f}")
-
+    a = JOURS_PASSES
     with np.errstate(invalid="ignore"):
-        tmoy7 = np.nanmean(m["tmoy"][:, -8:-1], axis=1)
-        tsol7 = np.nanmean(m["tsol"][:, -8:-1], axis=1)
-        gel = np.nanmin(m["tmin"][:, -4:-1], axis=1) < im.GEL
+        tmoy7 = np.nanmean(m["tmoy"][:, a - 7:a], axis=1)
+        tsol7 = np.nanmean(m["tsol"][:, a - 7:a], axis=1)
+        gel = np.nanmin(m["tmin"][:, a - 3:a], axis=1) < im.GEL
+        pluie_prevue = np.nansum(m["pluie"][:, a + 1:], axis=1)
+    pluie_passee = m["pluie"][:, :a + 1]
     ecrire_json(sortie / "info.json", {
         "date": aujourdhui.isoformat(),
         "bornes": bornes,
         "meteo": {
-            "pluie_14j_mm": round(float(np.mean(np.nansum(m["pluie"][:, -15:-1], axis=1)[dans_zone])), 1),
+            "pluie_14j_mm": round(float(np.mean(np.nansum(m["pluie"][:, a - 14:a], axis=1)[dans_zone])), 1),
             "temperature_7j": round(float(np.nanmean(tmoy7[dans_zone])), 1),
             "temperature_sol_7j": round(float(np.nanmean(tsol7[dans_zone])), 1),
-            "jours_depuis_bonne_pluie": int(np.median(im.jours_depuis_bonne_pluie(m["pluie"])[dans_zone])),
+            "jours_depuis_bonne_pluie": int(np.median(im.jours_depuis_bonne_pluie(pluie_passee)[dans_zone])),
             "gel_recent": bool(np.mean(gel[dans_zone]) > 0.3),
+            "pluie_prevue_7j_mm": round(float(np.mean(pluie_prevue[dans_zone])), 1),
         },
         "lune": lune(aujourdhui),
+        "previsions": {"dates": [d.isoformat() for d in dates], "zone": ZONE, "especes": previsions},
         "especes": infos,
     })
-    print("Cartes du jour prêtes.")
+    print("Cartes du jour et prévisions prêtes.")
 
 
 if __name__ == "__main__":
