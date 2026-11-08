@@ -41,7 +41,8 @@ SAISON = {
 }
 
 PLUIE_MIN, PLUIE_ECHELLE = 5.0, 18.0  # mm sur deux jours : 20 mm -> 0,57 ; 40 mm -> 0,86 ; 60 mm -> 0,95
-CUMUL_ECHELLE = 35.0                   # pluie des 14 derniers jours : 35 mm -> 0,63 ; 70 mm -> 0,86
+CUMUL_ECHELLE = 30.0                   # pluie récente pondérée : 30 mm -> 0,63 ; 60 mm -> 0,86
+CUMUL_DEMI_VIE = 7.0                   # jours : une pluie compte moitié moins au bout d'une semaine
 DUREE_POUSSE = 10                      # jours après la pluie pris en compte pour la température du sol
 GEL = -3.0                             # °C (minimum de l'air) sur les 3 derniers jours
 
@@ -93,8 +94,10 @@ def indice(espece, pluie, tsol, tmin, mois):
         t_pousse = moyenne(tsol[:, debut:fin]) if fin > debut else tsol[:, -1]
         f_t = pic(t_pousse, *p["tsol"], p["marge_t"])
         meilleur = np.maximum(meilleur, r * w * f_t)
-    # Un sol bien arrosé sur deux semaines aide (plusieurs pluies valent mieux qu'une seule)
-    f_cumul = 1 - np.exp(-passe[:, -14:].sum(axis=1) / CUMUL_ECHELLE)
+    # Un sol bien arrosé aide (plusieurs pluies valent mieux qu'une seule) ; l'effet s'estompe peu à peu
+    ages = np.arange(passe.shape[1], 0, -1)
+    poids = 0.5 ** (ages / CUMUL_DEMI_VIE)
+    f_cumul = 1 - np.exp(-(passe * poids).sum(axis=1) / CUMUL_ECHELLE)
     t_actuel = moyenne(tsol[:, -3:])
     f_actuel = dans(t_actuel, p["tsol_actuel"], 40, 2)
     with warnings.catch_warnings():
