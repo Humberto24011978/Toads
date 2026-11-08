@@ -1,0 +1,74 @@
+{
+ "cepe": {
+  "observations": 100,
+  "modele": true,
+  "variables_cles": [
+   "ph",
+   "foret",
+   "altitude",
+   "pente",
+   "nordicite"
+  ],
+  "part_favorable": 40.2
+ },
+ "girolle": {
+  "observations": 59,
+  "modele": true,
+  "variables_cles": [
+   "ph",
+   "altitude",
+   "pente",
+   "foret",
+   "mixte"
+  ],
+  "part_favorable": 37.7
+ },
+ "trompette": {
+  "observations": 19,
+  "modele": false,
+  "variables_cles": null,
+  "part_favorable": 38.0
+ },
+ "chanterelle_tube": {
+  "observations": 38,
+  "modele": true,
+  "variables_cles": [
+   "ph",
+   "foret",
+   "pente",
+   "altitude",
+   "nordicite"
+  ],
+  "part_favorable": 24.5
+ },
+ "coulemelle": {
+  "observations": 114,
+  "modele": true,
+  "variables_cles": [
+   "altitude",
+   "ph",
+   "pente",
+   "nordicite",
+   "foret"
+  ],
+  "part_favorable": 12.5
+ },
+ "rose_des_pres": {
+  "observations": 9,
+  "modele": false,
+  "variables_cles": null,
+  "part_favorable": 21.7
+ },
+ "coprin": {
+  "observations": 108,
+  "modele": true,
+  "variables_cles": [
+   "nordicite",
+   "altitude",
+   "pente",
+   "cultures",
+   "ph"
+  ],
+  "part_favorable": 19.6
+ }
+}
