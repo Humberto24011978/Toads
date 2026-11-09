@@ -62,7 +62,9 @@ VARIABLES_RELIEF = ["altitude", "pente", "nordicite", "tpi", "ph"]
 MIN_OBS = 25
 # Si une espèce a trop peu d'observations, on apprend sur celles de son groupe
 GROUPES = {
-    "foret": ["cepe", "girolle", "trompette", "chanterelle_tube", "pied_de_mouton", "morille"],
+    "foret": ["cepe", "girolle", "trompette", "chanterelle_tube", "pied_de_mouton"],
+    # La morille n'est dans aucun groupe : son milieu (alluvions, frênes, vergers) diffère trop des autres
+    # espèces des bois ; tant qu'elle a peu d'observations, ses règles d'habitat suffisent.
     "prairie": ["coulemelle", "rose_des_pres", "coprin"],
 }
 
@@ -85,6 +87,10 @@ def score_regles(espece, occ, rel):
         hab = np.clip(hab / 0.5, 0, 1)
         if espece == "coulemelle":                           # elle adore les lisières
             hab = 0.5 * hab + 0.5 * np.clip(f["lisiere"] / 0.12, 0, 1)
+    if espece == "morille":                                  # fonds de vallée plats et bords de cours d'eau
+        pente = rel["pente"].astype("float32") / 10
+        creux = np.clip(-rel["tpi"].astype("float32") / 15, 0, 1)
+        hab = hab * dans(pente, 0, 6, 14) * (0.6 + 0.4 * creux)
     p = SOL_ALT[espece]
     f_ph = dans(ph, *p["ph"], p["marge"])
     f_alt = dans(alt, *p["alt"], 250)
@@ -130,9 +136,10 @@ def main():
         n = len(presences)
         source = "espèce"
         if n < MIN_OBS:
-            groupe = next(g for g, membres in GROUPES.items() if espece in membres)
-            presences = np.unique(obs.loc[obs.espece.isin(GROUPES[groupe]), "case"])
-            source = f"groupe {groupe}"
+            groupe = next((g for g, membres in GROUPES.items() if espece in membres), None)
+            if groupe:
+                presences = np.unique(obs.loc[obs.espece.isin(GROUPES[groupe]), "case"])
+                source = f"groupe {groupe}"
         if len(presences) >= MIN_OBS:
             n_app = len(presences)
             # Fond : carrés au hasard + carrés où d'autres espèces ont été vues
