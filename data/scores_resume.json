@@ -33,7 +33,7 @@
    "pente",
    "nordicite"
   ],
-  "part_favorable": 12.3
+  "part_favorable": 11.6
  },
  "chanterelle_tube": {
   "observations": 38,
@@ -45,7 +45,7 @@
    "altitude",
    "nordicite"
   ],
-  "part_favorable": 9.9
+  "part_favorable": 10.1
  },
  "coulemelle": {
   "observations": 115,
@@ -57,7 +57,7 @@
    "pente",
    "tpi"
   ],
-  "part_favorable": 5.1
+  "part_favorable": 5.2
  },
  "rose_des_pres": {
   "observations": 9,
@@ -81,7 +81,7 @@
    "tpi",
    "ph"
   ],
-  "part_favorable": 7.1
+  "part_favorable": 7.3
  },
  "pied_de_mouton": {
   "observations": 44,
@@ -93,6 +93,18 @@
    "altitude",
    "nordicite"
   ],
-  "part_favorable": 22.1
+  "part_favorable": 22.2
+ },
+ "morille": {
+  "observations": 18,
+  "modele": "groupe foret",
+  "variables_cles": [
+   "ph",
+   "altitude",
+   "foret",
+   "pente",
+   "nordicite"
+  ],
+  "part_favorable": 7.8
  }
 }
