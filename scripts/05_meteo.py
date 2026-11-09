@@ -27,6 +27,10 @@ from commun import (BBOX, COLS, CRS, DATA, ESPECES, LIGNES, PAS, SITE, TRANSFORM
                     lire_bandes)
 
 API = "https://api.open-meteo.com/v1/forecast"
+ARCHIVE = "https://archive-api.open-meteo.com/v1/archive"
+VIGIEAU = "https://api.vigieau.gouv.fr/api/departements"
+DEPS = ["54", "55", "57", "67", "68", "88"]
+GROS_PAS = 3            # bilan hydrique depuis janvier : un point sur 3 dans chaque sens (environ 35 x 40 km)
 PAS_METEO = (0.15, 0.12)  # degrés (lon, lat) : environ 11 x 13 km
 JOURS_PASSES = 30
 JOURS_PREVUS = 7                 # prévisions : aujourd'hui + 7 jours
@@ -49,14 +53,15 @@ def points_meteo():
 def meteo():
     lons, lats = points_meteo()
     pts = [(lo, la) for la in lats for lo in lons]
-    pluie, tmoy, tmin, tsol, alt = [], [], [], [], []
+    pluie, tmoy, tmin, tsol, et0, alt = [], [], [], [], [], []
     for i in range(0, len(pts), 100):
         lot = pts[i:i + 100]
         data = get(API, {
             "longitude": ",".join(f"{p[0]:.3f}" for p in lot),
             "latitude": ",".join(f"{p[1]:.3f}" for p in lot),
             # Même variable de sol que les archives utilisées pour l'apprentissage (06_phenologie.py)
-            "daily": "precipitation_sum,temperature_2m_mean,temperature_2m_min,soil_temperature_0_to_7cm_mean",
+            "daily": "precipitation_sum,temperature_2m_mean,temperature_2m_min,soil_temperature_0_to_7cm_mean,"
+                     "et0_fao_evapotranspiration",
             "past_days": JOURS_PASSES, "forecast_days": JOURS_PREVUS + 1, "timezone": "Europe/Paris",
         }).json()
         data = data if isinstance(data, list) else [data]
@@ -66,9 +71,53 @@ def meteo():
             tmoy.append(np.array(j["temperature_2m_mean"], dtype=float))
             tmin.append(np.array(j["temperature_2m_min"], dtype=float))
             tsol.append(np.array(j["soil_temperature_0_to_7cm_mean"], dtype=float))
+            et0.append(np.array(j["et0_fao_evapotranspiration"], dtype=float))
             alt.append(float(d.get("elevation") or 0))
     return {"pluie": np.array(pluie), "tmoy": np.array(tmoy), "tmin": np.array(tmin), "tsol": np.array(tsol),
-            "alt": np.array(alt), "forme": (len(lats), len(lons))}
+            "et0": np.array(et0), "alt": np.array(alt), "forme": (len(lats), len(lons))}
+
+
+def reserve_sol(m, aujourdhui):
+    """Réserve en eau du sol (0 à 1) pour chaque point et chaque jour de la série météo.
+
+    Bilan pluie moins évaporation depuis le 1er janvier (sol plein en hiver) : archives Open-Meteo sur une grille
+    plus lâche jusqu'au début de la série, puis la série du jour (30 jours passés et prévisions) point par point.
+    """
+    lons, lats = points_meteo()
+    ny, nx = m["forme"]
+    debut = dt.date(aujourdhui.year, 1, 1)
+    fin = aujourdhui - dt.timedelta(days=JOURS_PASSES + 1)
+    depart = np.full(ny * nx, im.RESERVE_UTILE)
+    if fin > debut:
+        gl, gL = np.arange(0, nx, GROS_PAS), np.arange(0, ny, GROS_PAS)
+        pts = [(lons[c], lats[r]) for r in gL for c in gl]
+        pl, ev = [], []
+        for i in range(0, len(pts), 60):
+            lot = pts[i:i + 60]
+            data = get(ARCHIVE, {
+                "longitude": ",".join(f"{p[0]:.3f}" for p in lot), "latitude": ",".join(f"{p[1]:.3f}" for p in lot),
+                "start_date": debut.isoformat(), "end_date": fin.isoformat(),
+                "daily": "precipitation_sum,et0_fao_evapotranspiration", "timezone": "Europe/Paris"}, timeout=300).json()
+            for d in (data if isinstance(data, list) else [data]):
+                pl.append(np.array(d["daily"]["precipitation_sum"], dtype=float))
+                ev.append(np.array(d["daily"]["et0_fao_evapotranspiration"], dtype=float))
+        gros = im.bilan_hydrique(np.array(pl), np.array(ev))[:, -1].reshape(len(gL), len(gl))
+        # Chaque point fin part de la réserve du point lâche le plus proche
+        rr = np.clip(np.rint(np.arange(ny) / GROS_PAS).astype(int), 0, len(gL) - 1)
+        cc = np.clip(np.rint(np.arange(nx) / GROS_PAS).astype(int), 0, len(gl) - 1)
+        depart = (gros[rr][:, cc] * im.RESERVE_UTILE).ravel()
+        print(f"  réserve en eau du sol au {fin} : médiane {np.median(gros) * 100:.0f} % (bilan depuis le {debut})")
+    return im.bilan_hydrique(m["pluie"], m["et0"], depart)
+
+
+def secheresse():
+    """Niveau des arrêtés sécheresse en vigueur par département (VigiEau)."""
+    try:
+        deps = get(VIGIEAU, {}, essais=2, timeout=60).json()
+        return {str(d["code"]): d.get("niveauGraviteMax") for d in deps if str(d.get("code")) in DEPS}
+    except Exception as e:
+        print(f"  VigiEau indisponible : {e}")
+        return {}
 
 
 def vers_grille(valeurs, forme):
@@ -92,16 +141,17 @@ def interpolation_altitude(altitude):
 def series_jour(m, k):
     """Les 31 jours qui se terminent au jour k (0 = aujourd'hui, 1 = demain...)."""
     i = JOURS_PASSES + k
-    return m["pluie"][:, i - 30:i + 1], m["tsol"][:, i - 30:i + 1], m["tmin"][:, i - 30:i + 1]
+    reserve = m["reserve"][:, i - 30:i + 1] if m.get("reserve") is not None else None
+    return m["pluie"][:, i - 30:i + 1], m["tsol"][:, i - 30:i + 1], m["tmin"][:, i - 30:i + 1], reserve
 
 
 def indice_grille(espece, m, k, mois, interp):
     """Indice du jour k sur la grille de 100 m, en tenant compte de l'altitude de chaque carré."""
-    pluie, tsol, tmin = series_jour(m, k)
+    pluie, tsol, tmin, reserve = series_jour(m, k)
     niveaux = []
     for z in NIVEAUX:
         ecart = (m["alt"] - z)[:, None]
-        ind = im.indice(espece, pluie, tsol + GRADIENT_SOL * ecart, tmin + GRADIENT_AIR * ecart, mois)
+        ind = im.indice(espece, pluie, tsol + GRADIENT_SOL * ecart, tmin + GRADIENT_AIR * ecart, mois, reserve)
         niveaux.append(vers_grille(ind, m["forme"]))
     niveaux = np.stack(niveaux)
     bas, haut, f, (lig, col) = interp
@@ -232,6 +282,13 @@ def main():
     dates = [aujourdhui + dt.timedelta(days=k) for k in range(JOURS_PREVUS + 1)]
     print(f"Météo du {aujourdhui} et prévisions à {JOURS_PREVUS} jours...")
     m = meteo()
+    print("Réserve en eau du sol (bilan depuis janvier)...")
+    try:
+        m["reserve"] = reserve_sol(m, aujourdhui)
+    except Exception as e:      # sans archives, on garde l'indice sans réserve en eau
+        print(f"  indisponible : {e}")
+        m["reserve"] = None
+    niveaux_secheresse = secheresse()
 
     sortie = SITE / "cartes"
     sortie.mkdir(parents=True, exist_ok=True)
@@ -300,7 +357,11 @@ def main():
             "jours_depuis_bonne_pluie": int(np.median(im.jours_depuis_bonne_pluie(pluie_passee)[dans_zone])),
             "gel_recent": bool(np.mean(gel[dans_zone]) > 0.3),
             "pluie_prevue_7j_mm": round(float(np.mean(pluie_prevue[dans_zone])), 1),
+            "reserve_sol_pct": None if m["reserve"] is None else round(float(np.median(m["reserve"][dans_zone, a])) * 100),
+            "reserve_sol_30j_pct": None if m["reserve"] is None else round(float(np.median(m["reserve"][dans_zone, 0])) * 100),
+            "reserve_sol_prevue_pct": None if m["reserve"] is None else round(float(np.median(m["reserve"][dans_zone, -1])) * 100),
         },
+        "secheresse": niveaux_secheresse,
         "lune": lune(aujourdhui),
         "previsions": {"dates": [d.isoformat() for d in dates], "zone": ZONE, "especes": previsions},
         "especes": infos,

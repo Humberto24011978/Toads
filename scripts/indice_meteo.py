@@ -5,7 +5,10 @@ Principe, pour chaque espèce :
 2. un délai depuis cette pluie, propre à l'espèce (le temps que les champignons sortent) ;
 3. une température du sol favorable pendant la pousse, c'est-à-dire dans les jours qui suivent la pluie
    (et non au moment de la cueillette : des cèpes sortis par temps doux restent là quand il fraîchit) ;
-4. un sol pas trop froid aujourd'hui, pas de gel marqué, et un coefficient de saison souple.
+4. un sol pas trop froid aujourd'hui, pas de gel marqué, et un coefficient de saison souple ;
+5. la réserve en eau du sol en profondeur (bilan pluie moins évaporation depuis le 1er janvier) : une pluie
+   tombée sur un sol desséché en profondeur déclenche une pousse bien plus faible, et un sol qui se vide limite
+   la pousse en cours. Les espèces des bois (mycorhiziennes) y sont plus sensibles que celles des prés.
 
 Toutes les séries sont quotidiennes, du plus ancien au plus récent ; la dernière colonne est aujourd'hui.
 """
@@ -40,6 +43,12 @@ SAISON = {
     "pied_de_mouton":   {7: .4, 8: .8, 9: 1, 10: 1, 11: 1, 12: .8, 1: .3},
 }
 
+# Réserve en eau du sol : part minimale gardée quand le sol est sec en profondeur (0 = effet maximal)
+PLANCHER_SOL = {"cepe": .3, "girolle": .3, "trompette": .35, "chanterelle_tube": .35, "pied_de_mouton": .35,
+                "coulemelle": .5, "rose_des_pres": .6, "coprin": .65}
+RESERVE_UTILE = 100.0      # mm d'eau utilisables par les racines et le mycélium (sol forestier moyen)
+INTERCEPTION = 1.0         # mm de pluie retenus chaque jour par le feuillage et la litière
+
 PLUIE_MIN, PLUIE_ECHELLE = 5.0, 18.0  # mm sur deux jours : 20 mm -> 0,57 ; 40 mm -> 0,86 ; 60 mm -> 0,95
 CUMUL_ECHELLE = 30.0                   # pluie récente pondérée : 30 mm -> 0,63 ; 60 mm -> 0,86
 CUMUL_DEMI_VIE = 7.0                   # jours : une pluie compte moitié moins au bout d'une semaine
@@ -73,8 +82,30 @@ def moyenne(a, axis=1):
     return np.where(np.isnan(m), 0, m)
 
 
-def indice(espece, pluie, tsol, tmin, mois):
-    """Indice de 0 à 1 pour chaque point. pluie, tsol, tmin : tableaux (points, jours)."""
+def bilan_hydrique(pluie, et0, depart=None):
+    """Réserve en eau du sol jour après jour (fraction 0 à 1 de la réserve utile).
+
+    pluie, et0 : tableaux (points, jours) en mm ; depart : réserve au début (mm, pleine par défaut).
+    L'évaporation réelle baisse quand le sol s'assèche (moins de la moitié de la réserve).
+    """
+    pluie, et0 = np.nan_to_num(np.asarray(pluie, float)), np.nan_to_num(np.asarray(et0, float))
+    r = np.full(pluie.shape[0], RESERVE_UTILE) if depart is None else np.asarray(depart, float).copy()
+    sortie = np.empty_like(pluie)
+    for j in range(pluie.shape[1]):
+        ks = np.minimum(1, r / RESERVE_UTILE / 0.5)
+        r = np.clip(r + np.maximum(pluie[:, j] - INTERCEPTION, 0) - et0[:, j] * ks, 0, RESERVE_UTILE)
+        sortie[:, j] = r / RESERVE_UTILE
+    return sortie
+
+
+def effet_sol(espece, reserve):
+    """Facteur (plancher à 1) selon la réserve en eau du sol : plein au-dessus de 45 %, plancher sous 10 %."""
+    lo = PLANCHER_SOL[espece]
+    return lo + (1 - lo) * np.clip((np.asarray(reserve, float) - 0.10) / 0.35, 0, 1)
+
+
+def indice(espece, pluie, tsol, tmin, mois, reserve=None):
+    """Indice de 0 à 1 pour chaque point. pluie, tsol, tmin (et reserve, facultative) : tableaux (points, jours)."""
     p = PARAMS[espece]
     f_saison = SAISON[espece].get(mois, 0)
     n, d = pluie.shape
@@ -90,6 +121,8 @@ def indice(espece, pluie, tsol, tmin, mois):
         if w == 0:
             continue
         r = 1 - np.exp(-np.maximum(deux[:, j] - PLUIE_MIN, 0) / PLUIE_ECHELLE)
+        if reserve is not None:          # la même pluie sur un sol sec en profondeur déclenche moins
+            r = r * effet_sol(espece, reserve[:, min(j + 2, d - 1)])
         debut, fin = j + 1, min(j + 1 + DUREE_POUSSE, d)
         t_pousse = moyenne(tsol[:, debut:fin]) if fin > debut else tsol[:, -1]
         f_t = pic(t_pousse, *p["tsol"], p["marge_t"])
@@ -104,7 +137,8 @@ def indice(espece, pluie, tsol, tmin, mois):
         warnings.simplefilter("ignore", category=RuntimeWarning)
         gel = np.nanmin(tmin[:, -4:-1], axis=1) < GEL
     f_gel = np.where(gel, p["gel"], 1)
-    return f_saison * meilleur * (0.6 + 0.4 * f_cumul) * f_actuel * f_gel
+    f_sol = effet_sol(espece, moyenne(reserve[:, -3:])) if reserve is not None else 1
+    return f_saison * meilleur * (0.6 + 0.4 * f_cumul) * f_actuel * f_gel * np.sqrt(f_sol)
 
 
 def jours_depuis_bonne_pluie(pluie):
