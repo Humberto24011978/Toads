@@ -10,7 +10,7 @@ on:
         description: "Étapes à lancer"
         type: choice
         default: tout
-        options: [tout, cartes, observations, occupation, relief, scores, reglages-meteo]
+        options: [tout, cartes, observations, occupation, relief, scores, reglages-meteo, reserve-utile]
 
 permissions:
   contents: write
@@ -42,8 +42,11 @@ jobs:
       - name: 3. Relief et sol (Copernicus, SoilGrids)
         if: inputs.etapes == 'tout' || inputs.etapes == 'cartes' || inputs.etapes == 'relief'
         run: python scripts/03_relief_sol.py
+      - name: Réserve utile du sol (SoilGrids, relief)
+        if: inputs.etapes == 'tout' || inputs.etapes == 'cartes' || inputs.etapes == 'relief' || inputs.etapes == 'reserve-utile'
+        run: python scripts/07_reserve_utile.py
       - name: 4. Scores par espèce
-        if: inputs.etapes != 'reglages-meteo'
+        if: inputs.etapes != 'reglages-meteo' && inputs.etapes != 'reserve-utile'
         run: python scripts/04_scores.py
       - name: 5. Réglages météo appris sur les observations (archives Open-Meteo)
         if: inputs.etapes == 'tout' || inputs.etapes == 'observations' || inputs.etapes == 'reglages-meteo'

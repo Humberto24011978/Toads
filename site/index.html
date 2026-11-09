@@ -287,7 +287,10 @@ function texteSol(m) {
   if (m.reserve_sol_pct != null) {
     const r = m.reserve_sol_pct, avant = m.reserve_sol_30j_pct;
     d += ` Réserve en eau du sol en profondeur : ${r} %` + (avant != null ? ` (${avant} % il y a un mois)` : "") +
-      (r < 20 ? " : sol sec, la pousse reste faible même après une averse." : r < 45 ? " : sol encore un peu sec en profondeur." : ".");
+      (m.reserve_utile_mm ? ` pour un sol typique des bois du secteur (${m.reserve_utile_mm} mm d'eau utile)` : "") +
+      (m.reserve_sol_leger_pct != null ? `, ${m.reserve_sol_leger_pct} % sur sol sableux, caillouteux ou en crête` : "") +
+      (r < 20 ? " : sol sec, la pousse reste faible même après une averse." : r < 45 ? " : sol encore un peu sec en profondeur." : ".") +
+      " La carte en tient compte carré par carré.";
   }
   const s = Object.entries(info.secheresse || {}).filter(([, n]) => n && n !== "vigilance");
   if (s.length) d += ` Arrêtés sécheresse : ${s.map(([dep, n]) => `${dep} ${NIVEAUX_SECHERESSE[n] || n}`).join(", ")}.`;

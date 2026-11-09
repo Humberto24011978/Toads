@@ -78,16 +78,17 @@ def meteo():
 
 
 def reserve_sol(m, aujourdhui):
-    """Réserve en eau du sol (0 à 1) pour chaque point et chaque jour de la série météo.
+    """Réserve en eau du sol (0 à 1) pour chaque classe de sol, chaque point et chaque jour de la série météo.
 
     Bilan pluie moins évaporation depuis le 1er janvier (sol plein en hiver) : archives Open-Meteo sur une grille
     plus lâche jusqu'au début de la série, puis la série du jour (30 jours passés et prévisions) point par point.
+    Résultat : tableau (classes de réserve utile, points, jours).
     """
     lons, lats = points_meteo()
     ny, nx = m["forme"]
     debut = dt.date(aujourdhui.year, 1, 1)
     fin = aujourdhui - dt.timedelta(days=JOURS_PASSES + 1)
-    depart = np.full(ny * nx, im.RESERVE_UTILE)
+    departs = np.ones((len(im.CLASSES_RU), ny * nx))
     if fin > debut:
         gl, gL = np.arange(0, nx, GROS_PAS), np.arange(0, ny, GROS_PAS)
         pts = [(lons[c], lats[r]) for r in gL for c in gl]
@@ -101,13 +102,52 @@ def reserve_sol(m, aujourdhui):
             for d in (data if isinstance(data, list) else [data]):
                 pl.append(np.array(d["daily"]["precipitation_sum"], dtype=float))
                 ev.append(np.array(d["daily"]["et0_fao_evapotranspiration"], dtype=float))
-        gros = im.bilan_hydrique(np.array(pl), np.array(ev))[:, -1].reshape(len(gL), len(gl))
+        pl, ev = np.array(pl), np.array(ev)
         # Chaque point fin part de la réserve du point lâche le plus proche
         rr = np.clip(np.rint(np.arange(ny) / GROS_PAS).astype(int), 0, len(gL) - 1)
         cc = np.clip(np.rint(np.arange(nx) / GROS_PAS).astype(int), 0, len(gl) - 1)
-        depart = (gros[rr][:, cc] * im.RESERVE_UTILE).ravel()
-        print(f"  réserve en eau du sol au {fin} : médiane {np.median(gros) * 100:.0f} % (bilan depuis le {debut})")
-    return im.bilan_hydrique(m["pluie"], m["et0"], depart)
+        for c, ru in enumerate(im.CLASSES_RU):
+            gros = im.bilan_hydrique(pl, ev, ru=ru)[:, -1].reshape(len(gL), len(gl))
+            departs[c] = gros[rr][:, cc].ravel()
+        print(f"  réserve au {fin} (bilan depuis le {debut}) : "
+              + ", ".join(f"sol de {ru} mm {np.median(departs[c]) * 100:.0f} %" for c, ru in enumerate(im.CLASSES_RU)))
+    return np.stack([im.bilan_hydrique(m["pluie"], m["et0"], departs[c], ru=ru) for c, ru in enumerate(im.CLASSES_RU)])
+
+
+def preparer_sol():
+    """Classe de réserve utile de chaque carré de 100 m (interpolation entre deux classes)."""
+    chemin = DATA / "reserve_utile.tif"
+    ru = lire_bandes(chemin)["ru"].astype("float32") if chemin.exists() else np.full((LIGNES, COLS), im.RESERVE_UTILE, "float32")
+    ru = np.where(ru <= 0, im.RESERVE_UTILE, ru)
+    cl = np.array(im.CLASSES_RU, dtype="float32")
+    pos = np.clip(np.interp(ru, cl, np.arange(len(cl))), 0, len(cl) - 1)
+    bas = np.floor(pos).astype("int8")
+    return bas, np.minimum(bas + 1, len(cl) - 1).astype("int8"), (pos - bas).astype("float32"), ru
+
+
+def humidite_grille(m, k, sol):
+    """État du sol pour la pousse au jour k (0 sec à 1 bien pourvu), carré par carré, selon sa réserve utile."""
+    bas, haut, f, _ = sol
+    col = JOURS_PASSES + k
+    par_classe = np.stack([vers_grille(im.humidite_sol(m["reserve"][c], col), m["forme"])
+                           for c in range(len(im.CLASSES_RU))])
+    lig, cols = np.indices(bas.shape)
+    return par_classe[bas, lig, cols] * (1 - f) + par_classe[haut, lig, cols] * f
+
+
+def resume_sol(m, sol, dans_zone, masque, zone):
+    """Réserve en eau du sol dans la zone : sol typique des bois de la zone, et sol sableux ou caillouteux."""
+    if m.get("reserve") is None:
+        return {}
+    a = JOURS_PASSES
+    ru_zone = float(np.median(sol[3][masque & zone])) if (masque & zone).any() else im.RESERVE_UTILE
+    c = int(np.argmin(np.abs(np.array(im.CLASSES_RU) - ru_zone)))
+    r = m["reserve"][c][dans_zone]
+    leger = m["reserve"][1][dans_zone]           # classe de 50 mm : sol sableux, caillouteux ou mince
+    return {"reserve_utile_mm": round(ru_zone), "reserve_sol_pct": round(float(np.median(r[:, a])) * 100),
+            "reserve_sol_30j_pct": round(float(np.median(r[:, 0])) * 100),
+            "reserve_sol_prevue_pct": round(float(np.median(r[:, -1])) * 100),
+            "reserve_sol_leger_pct": round(float(np.median(leger[:, a])) * 100)}
 
 
 def secheresse():
@@ -141,17 +181,16 @@ def interpolation_altitude(altitude):
 def series_jour(m, k):
     """Les 31 jours qui se terminent au jour k (0 = aujourd'hui, 1 = demain...)."""
     i = JOURS_PASSES + k
-    reserve = m["reserve"][:, i - 30:i + 1] if m.get("reserve") is not None else None
-    return m["pluie"][:, i - 30:i + 1], m["tsol"][:, i - 30:i + 1], m["tmin"][:, i - 30:i + 1], reserve
+    return m["pluie"][:, i - 30:i + 1], m["tsol"][:, i - 30:i + 1], m["tmin"][:, i - 30:i + 1]
 
 
 def indice_grille(espece, m, k, mois, interp):
     """Indice du jour k sur la grille de 100 m, en tenant compte de l'altitude de chaque carré."""
-    pluie, tsol, tmin, reserve = series_jour(m, k)
+    pluie, tsol, tmin = series_jour(m, k)
     niveaux = []
     for z in NIVEAUX:
         ecart = (m["alt"] - z)[:, None]
-        ind = im.indice(espece, pluie, tsol + GRADIENT_SOL * ecart, tmin + GRADIENT_AIR * ecart, mois, reserve)
+        ind = im.indice(espece, pluie, tsol + GRADIENT_SOL * ecart, tmin + GRADIENT_AIR * ecart, mois)
         niveaux.append(vers_grille(ind, m["forme"]))
     niveaux = np.stack(niveaux)
     bas, haut, f, (lig, col) = interp
@@ -282,12 +321,14 @@ def main():
     dates = [aujourdhui + dt.timedelta(days=k) for k in range(JOURS_PREVUS + 1)]
     print(f"Météo du {aujourdhui} et prévisions à {JOURS_PREVUS} jours...")
     m = meteo()
-    print("Réserve en eau du sol (bilan depuis janvier)...")
+    print("Réserve en eau du sol (bilan depuis janvier, selon le sol de chaque carré)...")
     try:
         m["reserve"] = reserve_sol(m, aujourdhui)
+        sol = preparer_sol()
+        humidite = {k: humidite_grille(m, k, sol) for k in range(len(dates))}
     except Exception as e:      # sans archives, on garde l'indice sans réserve en eau
         print(f"  indisponible : {e}")
-        m["reserve"] = None
+        m["reserve"], sol, humidite = None, None, {}
     niveaux_secheresse = secheresse()
 
     sortie = SITE / "cartes"
@@ -310,6 +351,8 @@ def main():
         prev = {"zone": [], "region": [], "statut": []}
         for k, jour_k in enumerate(dates):
             ind_grille = indice_grille(espece, m, k, jour_k.month, interp)
+            if k in humidite:          # réserve en eau du sol en profondeur, selon le sol de chaque carré
+                ind_grille = ind_grille * im.effet_sol(espece, humidite[k]).astype("float32")
             carte = potentiel.astype("float32") * ind_grille        # sur 1000
             image(carte, t, w, h, lut, sortie / f"{espece}_j{k}.png")
             ecrire_json(sortie / f"secteurs_{espece}_j{k}.json", secteurs(carte, 120))
@@ -357,9 +400,7 @@ def main():
             "jours_depuis_bonne_pluie": int(np.median(im.jours_depuis_bonne_pluie(pluie_passee)[dans_zone])),
             "gel_recent": bool(np.mean(gel[dans_zone]) > 0.3),
             "pluie_prevue_7j_mm": round(float(np.mean(pluie_prevue[dans_zone])), 1),
-            "reserve_sol_pct": None if m["reserve"] is None else round(float(np.median(m["reserve"][dans_zone, a])) * 100),
-            "reserve_sol_30j_pct": None if m["reserve"] is None else round(float(np.median(m["reserve"][dans_zone, 0])) * 100),
-            "reserve_sol_prevue_pct": None if m["reserve"] is None else round(float(np.median(m["reserve"][dans_zone, -1])) * 100),
+            **resume_sol(m, sol, dans_zone, masque, zone),
         },
         "secheresse": niveaux_secheresse,
         "lune": lune(aujourdhui),
