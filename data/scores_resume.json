@@ -33,7 +33,7 @@
    "pente",
    "nordicite"
   ],
-  "part_favorable": 11.6
+  "part_favorable": 12.3
  },
  "chanterelle_tube": {
   "observations": 38,
@@ -97,14 +97,8 @@
  },
  "morille": {
   "observations": 18,
-  "modele": "groupe foret",
-  "variables_cles": [
-   "ph",
-   "altitude",
-   "foret",
-   "pente",
-   "nordicite"
-  ],
-  "part_favorable": 7.8
+  "modele": null,
+  "variables_cles": null,
+  "part_favorable": 6.3
  }
 }
