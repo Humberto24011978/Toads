@@ -31,6 +31,8 @@ PARAMS = {
     "rose_des_pres":    dict(delai=(4, 14), marge_delai=6, tsol=(11, 20), marge_t=4, tsol_actuel=7, gel=.3),
     "coprin":           dict(delai=(2, 10), marge_delai=5, tsol=(6, 16), marge_t=4, tsol_actuel=3, gel=.4),
     "pied_de_mouton":   dict(delai=(7, 25), marge_delai=8, tsol=(6, 14), marge_t=4, tsol_actuel=2, gel=.7),
+    # Morille : au printemps, quand le sol se réchauffe vers 8 à 12 °C après des pluies ; les gelées tardives la freinent
+    "morille":          dict(delai=(5, 18), marge_delai=7, tsol=(7, 13), marge_t=3, tsol_actuel=5, gel=.5),
 }
 
 # Coefficient de saison (mois -> 0 à 1) : souple, c'est surtout la météo qui décide
@@ -43,10 +45,11 @@ SAISON = {
     "rose_des_pres":    {5: .3, 6: .6, 7: .8, 8: 1, 9: 1, 10: 1, 11: .5},
     "coprin":           {3: .3, 4: .6, 5: .7, 6: .5, 7: .5, 8: .6, 9: 1, 10: 1, 11: 1, 12: .5},
     "pied_de_mouton":   {7: .4, 8: .8, 9: 1, 10: 1, 11: 1, 12: .8, 1: .3},
+    "morille":          {2: .1, 3: .6, 4: 1, 5: .8, 6: .15},
 }
 
 # Réserve en eau du sol : part minimale gardée quand le sol est sec en profondeur (0 = effet maximal)
-PLANCHER_SOL = {"cepe": .3, "girolle": .3, "trompette": .35, "chanterelle_tube": .35, "pied_de_mouton": .35,
+PLANCHER_SOL = {"cepe": .3, "girolle": .3, "trompette": .35, "chanterelle_tube": .35, "pied_de_mouton": .35, "morille": .4,
                 "coulemelle": .5, "rose_des_pres": .6, "coprin": .65}
 RESERVE_UTILE = 100.0      # mm d'eau utilisables par les racines et le mycélium (sol forestier moyen)
 CLASSES_RU = [30, 50, 75, 100, 140, 200]   # mm : le bilan est calculé pour chaque classe de sol

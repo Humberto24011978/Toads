@@ -27,6 +27,10 @@ ARBRES = {
                              douglas_meleze=.6, coniferes=.8, peuplier_robinier=0, foret_autre=.3, lande=.2),
     "pied_de_mouton":   dict(chene=.9, hetre=1, chataignier=.7, feuillus=.8, mixte=.9, sapin_epicea=.9, pin=.6,
                              douglas_meleze=.5, coniferes=.7, peuplier_robinier=.1, foret_autre=.4, lande=.1),
+    # Morille : forêts alluviales (frênes, ormes, peupliers), feuillus frais, vergers et jardins, lisières
+    "morille":          dict(chene=.3, hetre=.3, chataignier=.1, feuillus=1, mixte=.4, sapin_epicea=.15, pin=.2,
+                             douglas_meleze=.1, coniferes=.1, peuplier_robinier=1, foret_autre=.6, lande=.1,
+                             agri_naturel=.35, espace_vert=.3),
 }
 
 # Affinité des espèces de prairie pour chaque milieu ouvert (0 à 1)
@@ -48,6 +52,7 @@ SOL_ALT = {
     "rose_des_pres":    dict(ph=(5.7, 8.5), marge=0.8, alt=(100, 1100)),
     "coprin":           dict(ph=(5.6, 8.5), marge=0.8, alt=(100, 1000)),
     "pied_de_mouton":   dict(ph=(5.2, 6.8), marge=0.8, alt=(100, 1300)),
+    "morille":          dict(ph=(5.9, 8.5), marge=0.9, alt=(100, 700)),
 }
 
 VARIABLES_OCC = ["chene", "hetre", "chataignier", "feuillus", "mixte", "sapin_epicea", "pin", "douglas_meleze",
@@ -57,7 +62,7 @@ VARIABLES_RELIEF = ["altitude", "pente", "nordicite", "tpi", "ph"]
 MIN_OBS = 25
 # Si une espèce a trop peu d'observations, on apprend sur celles de son groupe
 GROUPES = {
-    "foret": ["cepe", "girolle", "trompette", "chanterelle_tube", "pied_de_mouton"],
+    "foret": ["cepe", "girolle", "trompette", "chanterelle_tube", "pied_de_mouton", "morille"],
     "prairie": ["coulemelle", "rose_des_pres", "coprin"],
 }
 

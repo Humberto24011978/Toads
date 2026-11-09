@@ -40,6 +40,7 @@ ESPECES = {
     "rose_des_pres": {"nom": "Rosé des prés", "latin": ["Agaricus campestris"]},
     "coprin": {"nom": "Coprin chevelu", "latin": ["Coprinus comatus"]},
     "pied_de_mouton": {"nom": "Pied de mouton", "latin": ["Hydnum repandum", "Hydnum rufescens"]},
+    "morille": {"nom": "Morille", "latin": ["Morchella"]},      # tout le genre (morilles et morillon)
 }
 
 SESSION = requests.Session()
