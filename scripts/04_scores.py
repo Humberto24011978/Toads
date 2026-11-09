@@ -28,7 +28,7 @@ ARBRES = {
     "pied_de_mouton":   dict(chene=.9, hetre=1, chataignier=.7, feuillus=.8, mixte=.9, sapin_epicea=.9, pin=.6,
                              douglas_meleze=.5, coniferes=.7, peuplier_robinier=.1, foret_autre=.4, lande=.1),
     # Morille : forêts alluviales (frênes, ormes, peupliers), feuillus frais, vergers et jardins, lisières
-    "morille":          dict(chene=.3, hetre=.3, chataignier=.1, feuillus=1, mixte=.4, sapin_epicea=.15, pin=.2,
+    "morille":          dict(chene=.6, hetre=.3, chataignier=.1, feuillus=1, mixte=.4, sapin_epicea=.15, pin=.2,
                              douglas_meleze=.1, coniferes=.1, peuplier_robinier=1, foret_autre=.6, lande=.1,
                              agri_naturel=.35, espace_vert=.3),
 }
@@ -52,7 +52,7 @@ SOL_ALT = {
     "rose_des_pres":    dict(ph=(5.7, 8.5), marge=0.8, alt=(100, 1100)),
     "coprin":           dict(ph=(5.6, 8.5), marge=0.8, alt=(100, 1000)),
     "pied_de_mouton":   dict(ph=(5.2, 6.8), marge=0.8, alt=(100, 1300)),
-    "morille":          dict(ph=(5.9, 8.5), marge=0.9, alt=(100, 700)),
+    "morille":          dict(ph=(6.2, 8.5), marge=1.0, alt=(100, 500)),
 }
 
 VARIABLES_OCC = ["chene", "hetre", "chataignier", "feuillus", "mixte", "sapin_epicea", "pin", "douglas_meleze",
@@ -90,10 +90,12 @@ def score_regles(espece, occ, rel):
     if espece == "morille":                                  # fonds de vallée plats et bords de cours d'eau
         pente = rel["pente"].astype("float32") / 10
         creux = np.clip(-rel["tpi"].astype("float32") / 15, 0, 1)
-        hab = hab * dans(pente, 0, 6, 14) * (0.6 + 0.4 * creux)
+        hab = hab * dans(pente, 0, 6, 14) * (0.85 + 0.15 * creux)
     p = SOL_ALT[espece]
     f_ph = dans(ph, *p["ph"], p["marge"])
     f_alt = dans(alt, *p["alt"], 250)
+    if espece == "morille":                                  # sols calcaires ou alluvions : condition forte
+        return hab * f_ph * f_alt
     return hab * (0.3 + 0.7 * f_ph) * f_alt
 
 
