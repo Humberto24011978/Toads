@@ -690,7 +690,7 @@ async function ouvrirIci(ll) {
     if (quand) h += `Chances ${quand} : ${etat.jour === undefined ? "…" : texteScore(etat.jour)}<br>`;
     h += `Potentiel du lieu : ${etat.pot === undefined ? "…" : texteScore(etat.pot)}<br>`;
     if (etat.foret === undefined) h += `<span class="gris">Forêt : …</span><br>`;
-    else if (etat.foret && etat.foret.length) h += `Peuplement : ${sur([...new Set(etat.foret.map((f) => f.tfv || f.essence))].join(" ; ").toLowerCase())}<br>`;
+    else if (etat.foret && etat.foret.length) h += `Peuplement : ${sur([...new Set(etat.foret.map((f) => f.tfv || f.essence))].join(" ; ").toLowerCase().replace(/[\u0080-\u009f\ufffd]/g, "'"))}<br>`;
     else if (etat.foret) h += `<span class="gris">Hors forêt d'après la carte forestière</span><br>`;
     if (etat.pub && etat.pub.length) h += `🌲 ${sur(etat.pub.map((f) => f.toponyme || f.nature).join(" ; "))} (publique)<br>`;
     else if (etat.pub && etat.foret && etat.foret.length) h += `<span class="gris">Forêt privée ou statut non renseigné</span><br>`;
