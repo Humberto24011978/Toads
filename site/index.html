@@ -49,6 +49,16 @@
   .carnet { margin: 14px 0; font-size: 13.5px; }
   .carnet .ligne-carnet { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
   .fiabilite { font-size: 12.5px; color: var(--gris); margin: 0 0 8px; }
+  .cle { margin: 12px 0; font-size: 13.5px; }
+  .cle summary { cursor: pointer; font-weight: 650; padding: 9px 12px; border: 1px solid var(--ligne); border-radius: 10px; background: #fff; }
+  .cle .question { padding: 10px 0; border-bottom: 1px solid var(--ligne); line-height: 1.4; }
+  .cle .reponses { display: flex; gap: 8px; margin-top: 6px; }
+  .cle .reponses button { border: 1px solid var(--ligne); background: #fff; border-radius: 8px; padding: 5px 16px; font-size: 13.5px; cursor: pointer; color: var(--encre); }
+  .cle .reponses button[aria-pressed="true"] { background: var(--mousse); color: #fff; border-color: var(--mousse); }
+  .cle .alerte-cle { margin-top: 6px; color: #b3261e; font-weight: 600; }
+  .cle .bilan { margin-top: 10px; font-weight: 650; }
+  .cle .bilan.bon { color: #2f7d4a; }
+  .cle .bilan.mauvais { color: #b3261e; }
   label.titre { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: .6px; color: var(--gris); margin: 0 0 6px; }
   .especes { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
   .especes button {
@@ -181,6 +191,7 @@
     <div class="carnet" id="carnet"></div>
 
     <div class="fiche" id="fiche"></div>
+    <div class="cle" id="cle"></div>
 
     <div class="pied">
       La carte indique des zones favorables, jamais une certitude. Elle ne remplace pas l'identification :
@@ -369,6 +380,87 @@ function texteSol(m) {
   return d;
 }
 
+// ---- Clé de vérification : les critères qui distinguent chaque espèce de ses sosies ----
+// Chaque question attend « oui ». Un « non » affiche le sosie possible. Rien ne remplace l'avis d'un connaisseur.
+const CEPES = [
+  ["Sous le chapeau, il y a une mousse de petits tubes (comme une éponge), et non des lames ?", "Avec des lames, ce n'est pas un cèpe."],
+  ["Ces tubes sont blancs, jaunes ou verdâtres, jamais rouges ni orangés ?", "Des pores rouges ou orangés signalent d'autres bolets, dont le bolet Satan, toxique."],
+  ["La chair reste blanche quand on la coupe (elle ne bleuit pas) ?", "Une chair qui bleuit n'est pas celle d'un cèpe : c'est un autre bolet, à ne pas consommer sans avis."],
+  ["Le haut du pied porte un fin réseau en relief, de couleur claire ?", "Sans réseau clair, ou avec un réseau brun foncé très marqué, pensez au bolet amer."],
+  ["Les tubes ne tirent pas sur le rose, et un tout petit morceau de chair posé sur la langue (puis recraché) n'est pas amer ?", "Tubes rosés et goût très amer : c'est le bolet amer. Il n'est pas dangereux mais un seul gâche tout un plat."],
+];
+const CLES = {
+  cepe: CEPES, cepe_bordeaux: CEPES, cepe_ete: CEPES, cepe_bronze: CEPES, cepe_pins: CEPES,
+  girolle: [
+    ["Sous le chapeau, ce sont des plis épais, émoussés et fourchus qui descendent sur le pied, et non de fines lames serrées ?", "De vraies lames fines et serrées : c'est sans doute la fausse girolle (indigeste), ou le clitocybe de l'olivier (toxique)."],
+    ["La chair est ferme, pâle à l'intérieur, et se déchire en fibres comme du blanc de poulet ?", "Une chair molle et orangée jusqu'au cœur est celle de la fausse girolle."],
+    ["Elle pousse à terre, seule ou en groupes lâches, et non en touffe serrée sur une souche ou une racine ?", "En touffe sur du bois : pensez au clitocybe de l'olivier, toxique."],
+    ["Elle sent bon le fruit (abricot, mirabelle) ?", "Sans cette odeur fruitée, redoublez de prudence sur les autres critères."],
+  ],
+  trompette: [
+    ["Le champignon est un entonnoir creux jusqu'en bas, à chair très mince ?", "Un pied plein ou une chair épaisse ne correspondent pas à la trompette."],
+    ["L'extérieur est gris cendré, lisse ou à peine ridé, sans lames ?", "Avec des lames nettes, ce n'est pas une trompette."],
+    ["L'intérieur de l'entonnoir est brun-noir à noir ?", "Une autre couleur ne correspond pas."],
+  ],
+  chanterelle_tube: [
+    ["Sous le chapeau, ce sont des plis espacés gris-jaunâtre, et non de vraies lames ?", "De vraies lames serrées et tout orange : c'est sans doute la fausse girolle (indigeste)."],
+    ["Le pied est jaune, creux, souvent aplati ou sillonné ?", "Un pied plein, brun ou blanc ne correspond pas."],
+    ["Le chapeau est brun, creusé au centre, souvent percé jusque dans le pied ?", "Un chapeau bombé ou d'une autre couleur ne correspond pas."],
+    ["Vous avez regardé chaque champignon un par un, et non cueilli par poignées ?", "En cueillant par poignées dans la mousse, on ramasse facilement de petits champignons bruns à lames (cortinaires, galères), dont certains sont mortels. Triez tout, pied par pied."],
+  ],
+  coulemelle: [
+    ["Le champignon est grand : chapeau ouvert d'au moins 15 cm, sur un pied haut et élancé ?", "Ne cueillez jamais de petite « coulemelle » : les petites lépiotes (chapeau de moins de 10 cm) peuvent être mortelles."],
+    ["Le pied est tigré de zébrures brunes sur fond clair ?", "Un pied lisse et blanc ne correspond pas : pensez à la lépiote déguenillée ou à une autre espèce."],
+    ["L'anneau est épais, double, et coulisse le long du pied ?", "Un anneau fragile ou fixe ne correspond pas."],
+    ["Le pied, déterré en entier, a une base renflée mais sans sac (volve) autour ?", "Un sac membraneux à la base du pied est la marque des amanites, dont certaines sont mortelles."],
+    ["La chair reste blanche à la coupe (elle ne rougit pas nettement) ?", "Une chair qui rougit fortement évoque la lépiote déguenillée, parfois indigeste."],
+  ],
+  rose_des_pres: [
+    ["Les lames sont roses (jeune) à brun chocolat (âgé), jamais blanches ?", "Des lames blanches : danger. Ce peut être une amanite blanche, mortelle."],
+    ["Le pied, déterré en entier, n'a aucun sac (volve) à sa base ?", "Un sac à la base du pied est la marque des amanites, dont certaines sont mortelles."],
+    ["La base du pied ne jaunit pas vivement quand on la frotte ou la coupe, et ne sent ni l'encre ni le désinfectant ?", "Jaunissement vif et odeur d'encre : c'est l'agaric jaunissant, toxique."],
+    ["Il pousse dans l'herbe d'un pré ou d'une pâture, loin des arbres ?", "Sous les arbres, le risque de confusion avec une amanite est plus grand : vérifiez deux fois les lames et la base du pied."],
+  ],
+  coprin: [
+    ["Le chapeau est en cloche allongée, blanc, couvert de mèches retroussées ?", "Un chapeau gris et lisse, sans mèches : c'est sans doute le coprin noir d'encre, toxique avec de l'alcool."],
+    ["Il est jeune : entièrement blanc, lames blanches, bord du chapeau encore fermé ?", "Dès que les lames rosissent ou noircissent, il n'est plus bon à manger."],
+    ["Il a poussé loin d'une route ou d'un sol pollué ?", "Le coprin pousse souvent au bord des routes et sur les remblais : évitez ces endroits."],
+  ],
+  pied_de_mouton: [
+    ["Sous le chapeau, ce sont de petits aiguillons serrés qui se détachent au doigt, sans lames ni tubes ?", "Sans aiguillons, ce n'est pas un pied de mouton."],
+    ["Le chapeau est crème à orangé pâle, la chair claire et cassante ?", "Un chapeau brun écailleux à aiguillons gris évoque d'autres hydnes, amers ou coriaces."],
+  ],
+  morille: [
+    ["Coupée en deux dans la longueur, elle est entièrement creuse, d'une seule cavité du chapeau au pied ?", "Un intérieur cloisonné ou rempli : danger. Ce peut être un gyromitre, mortel."],
+    ["Le chapeau est creusé d'alvéoles en nid d'abeille, et non plissé comme une cervelle ?", "Un chapeau en forme de cervelle est celui du gyromitre, mortel."],
+    ["Le pied est vide, sans moelle cotonneuse à l'intérieur ?", "Un pied garni de moelle cotonneuse est celui d'une verpe : ce n'est pas une morille."],
+    ["Vous allez la cuire longuement (au moins 15 minutes) ?", "La morille est toxique crue ou peu cuite."],
+  ],
+};
+function afficherCle() {
+  const zone = document.getElementById("cle"), q = CLES[espece];
+  if (!q) { zone.innerHTML = ""; return; }
+  zone.innerHTML = `<details><summary>Vérifier ma cueillette</summary>` +
+    `<p class="aide">Répondez pour chaque champignon. Cette vérification aide à écarter les sosies ; elle ne remplace pas l'avis d'un pharmacien ou d'une société mycologique.</p>` +
+    q.map(([texte], i) => `<div class="question" data-i="${i}"><div>${texte}</div><div class="reponses"><button data-r="oui">Oui</button><button data-r="non">Non</button></div><div class="alerte-cle" hidden></div></div>`).join("") +
+    `<div class="bilan" id="bilan-cle"></div></details>`;
+  const reponses = {};
+  zone.querySelectorAll(".question").forEach((el) => {
+    const i = +el.dataset.i;
+    el.querySelectorAll("button").forEach((b) => b.onclick = () => {
+      reponses[i] = b.dataset.r;
+      el.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", x === b));
+      const al = el.querySelector(".alerte-cle");
+      al.hidden = b.dataset.r !== "non";
+      al.textContent = "⚠️ " + q[i][1];
+      const n = Object.keys(reponses).length, non = Object.values(reponses).filter((r) => r === "non").length, bilan = document.getElementById("bilan-cle");
+      if (non) { bilan.className = "bilan mauvais"; bilan.textContent = "Au moins un critère ne correspond pas : ne consommez pas ce champignon sans l'avoir fait vérifier."; }
+      else if (n === q.length) { bilan.className = "bilan bon"; bilan.textContent = "Tous les critères correspondent. Au moindre doute, faites tout de même vérifier votre cueillette."; }
+      else { bilan.className = "bilan"; bilan.textContent = ""; }
+    });
+  });
+}
+
 function afficher() {
   if (!info.especes[espece]) espece = Object.keys(info.especes)[0];
   const e = info.especes[espece], f = FICHES[espece] || FICHES.cepe, m = info.meteo, p = prevEspece(espece);
@@ -429,6 +521,7 @@ function afficher() {
     (f.signes ? `<dt>Le reconnaître</dt><dd>${f.signes}</dd>` : "") + `</dl>
      <p style="margin:0 0 8px">${f.conseil}</p>` + fiab + (f.attention ? `<div class="attention">⚠️ ${f.attention}</div>` : "");
   afficherCarnet();
+  afficherCle();
 }
 
 document.getElementById("mode-jour").onclick = () => { mode = "jour"; enregistrer(); afficher(); };
