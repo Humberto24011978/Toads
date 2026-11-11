@@ -32,7 +32,11 @@ PAS_FIN = PAS // FIN
 TRANSFORM_FIN = from_origin(X0, Y1, PAS_FIN, PAS_FIN)
 
 ESPECES = {
-    "cepe": {"nom": "Cèpe", "latin": ["Boletus edulis", "Boletus aereus", "Boletus reticulatus", "Boletus pinophilus"]},
+    # Les quatre cèpes : même groupe à l'affichage, mais chacun a ses arbres, son sol, son altitude et sa saison
+    "cepe_bordeaux": {"nom": "Cèpe de Bordeaux", "court": "de Bordeaux", "latin": ["Boletus edulis"], "groupe": "cepe"},
+    "cepe_ete": {"nom": "Cèpe d'été", "court": "d'été", "latin": ["Boletus reticulatus"], "groupe": "cepe"},  # = B. aestivalis
+    "cepe_bronze": {"nom": "Cèpe bronzé", "court": "bronzé", "latin": ["Boletus aereus"], "groupe": "cepe"},
+    "cepe_pins": {"nom": "Cèpe des pins", "court": "des pins", "latin": ["Boletus pinophilus"], "groupe": "cepe"},
     "girolle": {"nom": "Girolle", "latin": ["Cantharellus cibarius"]},
     "trompette": {"nom": "Trompette de la mort", "latin": ["Craterellus cornucopioides"]},
     "chanterelle_tube": {"nom": "Chanterelle en tube", "latin": ["Craterellus tubaeformis"]},
@@ -42,6 +46,20 @@ ESPECES = {
     "pied_de_mouton": {"nom": "Pied de mouton", "latin": ["Hydnum repandum", "Hydnum rufescens"]},
     "morille": {"nom": "Morille", "latin": ["Morchella"]},      # tout le genre (morilles et morillon)
 }
+
+# Groupes affichés comme une seule espèce « tous » : la carte du groupe prend, carré par carré, le meilleur
+# score de ses membres, pondéré par leur fréquence dans la région (un très bon coin à cèpe bronzé, rare ici,
+# ne vaut pas un très bon coin à cèpe de Bordeaux).
+GROUPES = {
+    "cepe": {"nom": "Cèpes", "tous": "Tous les cèpes",
+             "poids": {"cepe_bordeaux": 1.0, "cepe_ete": 0.9, "cepe_bronze": 0.55, "cepe_pins": 0.5}},
+}
+
+
+def membres(cle):
+    """Espèces désignées par une clé : l'espèce elle-même, ou les membres d'un groupe (« cepe »)."""
+    return list(GROUPES[cle]["poids"]) if cle in GROUPES else [cle]
+
 
 SESSION = requests.Session()
 SESSION.headers["User-Agent"] = "Toads/1.0"

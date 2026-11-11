@@ -3,8 +3,9 @@
 Pour chaque observation GBIF datée, on récupère la météo réelle des 30 jours précédents
 (archives Open-Meteo, gratuites) : pluie, température de l'air et du sol.
 On compare ensuite les dates où l'espèce a été trouvée à des dates « témoins » :
-- les dates où d'autres champignons ont été signalés au même endroit (les cueilleurs étaient sortis) ;
-- des dates tirées au hasard pendant la même saison.
+- les dates où d'autres champignons ont été signalés (les mycologues étaient sortis, sans noter l'espèce) :
+  autres espèces suivies et « groupe cible » de l'étape 1, là où la météo est déjà téléchargée ;
+- des dates tirées au hasard de mars à décembre.
 Les réglages (délai après la pluie, température du sol pendant la pousse) qui séparent le
 mieux les deux groupes sont retenus, s'ils font nettement mieux que les réglages de départ.
 
@@ -22,13 +23,14 @@ import pandas as pd
 from pyproj import Transformer
 
 import indice_meteo as im
-from commun import COLS, CRS, DATA, LIGNES, PAS, X0, Y1, ecrire_json, get, lire_bandes
+from commun import COLS, CRS, DATA, GROUPES, LIGNES, PAS, X0, Y1, ecrire_json, get, lire_bandes, membres
 
 ARCHIVE = "https://archive-api.open-meteo.com/v1/archive"
 CELLULE = 0.25                  # degrés : résolution des archives ERA5
 AVANT = 35                      # jours de météo nécessaires avant chaque date
 ANNEE_MIN = 2010
 TEMOINS_HASARD = 2              # dates au hasard par observation
+TEMOINS_FOND = 4000             # observations du groupe cible tirées au sort comme témoins, par espèce
 MIN_PRESENCES = 60
 GRADIENT_AIR, GRADIENT_SOL = 0.0065, 0.0055
 SEUIL_TROUVAILLE = 0.2          # une trouvaille réelle doit ressortir au moins à ce niveau (indice sans plafond)
@@ -37,13 +39,32 @@ SEUIL_TROUVAILLE = 0.2          # une trouvaille réelle doit ressortir au moins
 def trouvailles():
     """Trouvailles personnelles, lues dans le secret GitHub TROUVAILLES (jamais écrites dans le dépôt).
 
-    Format : [{"espece": "cepe", "lat": 48.5, "lon": 7.3, "date": "2026-11-07"}, ...]
+    Format : [{"espece": "cepe_bordeaux", "lat": 48.5, "lon": 7.3, "date": "2026-11-07"}, ...]
+    « espece » peut être un groupe (« cepe ») quand l'espèce exacte n'est pas connue ; une ligne avec
+    "absent": true note une sortie sans rien trouver (gardée pour mémoire, pas utilisée ici).
     """
     brut = os.environ.get("TROUVAILLES", "").strip()
     if not brut:
         return pd.DataFrame(columns=["espece", "lat", "lon", "date"])
     t = pd.DataFrame(json.loads(brut))
+    if "absent" in t:
+        t = t[~t["absent"].fillna(False).astype(bool)]
     t["date"] = pd.to_datetime(t["date"])
+    return t[["espece", "lat", "lon", "date"]].reset_index(drop=True)
+
+
+def attribuer_groupes(t, meteo):
+    """Une trouvaille notée « cèpe » sans précision est attribuée au cèpe que la météo de ce jour-là
+    explique le mieux (en novembre en montagne, ce sera le cèpe de Bordeaux)."""
+    for i in t.index[t.espece.isin(list(GROUPES))]:
+        candidats = membres(t.loc[i, "espece"])
+        P1, T1, M1, ok = series(meteo, t.loc[[i]])
+        if len(ok):
+            mois = int(t.loc[i, "date"].month)
+            valeurs = {e: float(im.indice(e, P1, T1, M1, mois)[0]) for e in candidats}
+            t.loc[i, "espece"] = max(valeurs, key=valeurs.get)
+        else:
+            t.loc[i, "espece"] = candidats[0]
     return t
 
 
@@ -70,6 +91,19 @@ def charger_observations():
     o = o.dropna(subset=["date"])
     o = o[(o.date.dt.year >= ANNEE_MIN) & (o.date < pd.Timestamp.today().normalize())]
     return preparer(o).drop_duplicates(subset=["espece", "cel_lat", "cel_lon", "date"]).reset_index(drop=True)
+
+
+def charger_fond():
+    """Observations datées du groupe cible (tous champignons) : elles servent de témoins."""
+    chemin = DATA / "fond.csv"
+    if not chemin.exists():
+        return None
+    f = pd.read_csv(chemin)
+    f["date"] = pd.to_datetime(f["date"], errors="coerce")
+    f = f.dropna(subset=["date"])
+    f = f[(f.date.dt.year >= ANNEE_MIN) & (f.date < pd.Timestamp.today().normalize())]
+    f["espece"] = f["espece"].fillna("").astype(str)
+    return preparer(f).drop_duplicates(subset=["espece", "cel_lat", "cel_lon", "date"]).reset_index(drop=True)
 
 
 def telecharger_meteo(o):
@@ -143,16 +177,21 @@ def indice_sans_saison(espece, params, P, T, M):
         im.PARAMS[espece], im.SAISON[espece] = sauvegarde
 
 
-def echantillons_espece(o, espece, rng):
+def echantillons_espece(o, espece, rng, fond=None):
     pres = o[o.espece == espece][["cel_lat", "cel_lon", "date", "alt"]].assign(y=1)
     # Témoins 1 : autres champignons signalés (même effort d'observation)
     autres = o[o.espece != espece][["cel_lat", "cel_lon", "date", "alt"]]
+    if fond is not None:
+        f = fond[fond.espece != espece][["cel_lat", "cel_lon", "date", "alt"]]
+        if len(f) > TEMOINS_FOND:
+            f = f.iloc[rng.choice(len(f), TEMOINS_FOND, replace=False)]
+        autres = pd.concat([autres, f], ignore_index=True)
     autres = autres.merge(pres[["cel_lat", "cel_lon", "date"]], how="left", indicator=True)
     autres = autres[autres._merge == "left_only"].drop(columns="_merge").assign(y=0)
-    # Témoins 2 : dates au hasard, même cellule et même saison (du 1er mai au 31 décembre)
+    # Témoins 2 : dates au hasard, même cellule, du 1er mars au 31 décembre
     hasard = pres.loc[pres.index.repeat(TEMOINS_HASARD)].copy()
-    debut = pd.to_datetime(hasard.date.dt.year.astype(str) + "-05-01")
-    hasard["date"] = debut + pd.to_timedelta(rng.integers(0, 244, len(hasard)), unit="D")
+    debut = pd.to_datetime(hasard.date.dt.year.astype(str) + "-03-01")
+    hasard["date"] = debut + pd.to_timedelta(rng.integers(0, 306, len(hasard)), unit="D")
     hasard["y"] = 0
     return pd.concat([pres, autres, hasard], ignore_index=True)
 
@@ -172,10 +211,14 @@ def main():
     print(f"{len(o)} observations datées depuis {ANNEE_MIN}, {len(t)} trouvailles personnelles")
     print("Météo historique (archives Open-Meteo)...")
     meteo = telecharger_meteo(pd.concat([o, t], ignore_index=True) if len(t) else o)
+    if len(t):
+        t = attribuer_groupes(t, meteo)
+    fond = charger_fond()
+    print("Témoins : " + (f"{len(fond)} observations datées du groupe cible" if fond is not None else "autres espèces suivies"))
     precedent = json.loads((DATA / "phenologie.json").read_text()) if (DATA / "phenologie.json").exists() else {}
     resultats = {}
     for espece, defaut in im.PARAMS_DEFAUT.items():
-        ech = echantillons_espece(o, espece, rng)
+        ech = echantillons_espece(o, espece, rng, fond)
         P, T, M, garder = series(meteo, ech)
         if len(garder) == 0:
             continue

@@ -7,10 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       etapes:
-        description: "Étapes à lancer"
-        type: choice
+        description: "Étapes, séparées par des virgules : tout, cartes, observations, occupation, relief, reserve-utile, europe, hauteur, acces, scores, reglages-meteo"
+        type: string
         default: tout
-        options: [tout, cartes, observations, occupation, relief, scores, reglages-meteo, reserve-utile]
 
 permissions:
   contents: write
@@ -34,22 +33,31 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
       - name: 1. Observations (GBIF)
-        if: inputs.etapes == 'tout' || inputs.etapes == 'observations'
+        if: contains(inputs.etapes, 'tout') || contains(inputs.etapes, 'observations')
         run: python scripts/01_observations.py
-      - name: 2. Forêts et occupation du sol (IGN)
-        if: inputs.etapes == 'tout' || inputs.etapes == 'cartes' || inputs.etapes == 'occupation'
+      - name: 2. Occupation du sol et forêts (IGN)
+        if: contains(inputs.etapes, 'tout') || contains(inputs.etapes, 'cartes') || contains(inputs.etapes, 'occupation')
         run: python scripts/02_occupation.py
       - name: 3. Relief et sol (Copernicus, SoilGrids)
-        if: inputs.etapes == 'tout' || inputs.etapes == 'cartes' || inputs.etapes == 'relief'
+        if: contains(inputs.etapes, 'tout') || contains(inputs.etapes, 'cartes') || contains(inputs.etapes, 'relief')
         run: python scripts/03_relief_sol.py
       - name: Réserve utile du sol (SoilGrids, relief)
-        if: inputs.etapes == 'tout' || inputs.etapes == 'cartes' || inputs.etapes == 'relief' || inputs.etapes == 'reserve-utile'
+        if: contains(inputs.etapes, 'tout') || contains(inputs.etapes, 'cartes') || contains(inputs.etapes, 'relief') || contains(inputs.etapes, 'reserve-utile')
         run: python scripts/07_reserve_utile.py
+      - name: Cartes européennes à 30 m (essences d'arbres, sol)
+        if: contains(inputs.etapes, 'tout') || contains(inputs.etapes, 'cartes') || contains(inputs.etapes, 'europe')
+        run: python scripts/08_europe.py
+      - name: Hauteur des arbres (LiDAR HD de l'IGN)
+        if: contains(inputs.etapes, 'tout') || contains(inputs.etapes, 'cartes') || contains(inputs.etapes, 'hauteur')
+        run: python scripts/09_hauteur.py
+      - name: Forêts publiques et zones protégées (IGN)
+        if: contains(inputs.etapes, 'tout') || contains(inputs.etapes, 'cartes') || contains(inputs.etapes, 'acces')
+        run: python scripts/10_acces.py
       - name: 4. Scores par espèce
-        if: inputs.etapes != 'reglages-meteo' && inputs.etapes != 'reserve-utile'
+        if: contains(inputs.etapes, 'tout') || contains(inputs.etapes, 'cartes') || contains(inputs.etapes, 'scores')
         run: python scripts/04_scores.py
-      - name: 5. Réglages météo appris sur les observations (archives Open-Meteo)
-        if: inputs.etapes == 'tout' || inputs.etapes == 'observations' || inputs.etapes == 'reglages-meteo'
+      - name: 5. Réglages météo d'après les observations datées
+        if: contains(inputs.etapes, 'tout') || contains(inputs.etapes, 'observations') || contains(inputs.etapes, 'reglages-meteo')
         run: python scripts/06_phenologie.py
       - name: Enregistrer les données
         run: |

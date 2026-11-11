@@ -4,7 +4,8 @@ Sources gratuites, sans clé :
 - altitude : modèle numérique Copernicus GLO-30 (30 m), hébergé en accès libre sur AWS ;
 - pH du sol (0-5 cm) : SoilGrids (ISRIC), maille de 250 m.
 
-Résultat : data/relief_sol.tif (altitude, pente, exposition, creux/crêtes, pH), carrés de 100 m
+Résultat : data/relief_sol.tif (altitude, pente, exposition, creux/crêtes, pH), carrés de 100 m,
+sur toute la grille (France et pays voisins)
 """
 import os
 
@@ -87,16 +88,20 @@ def position_topographique(alt, rayon_m=300):
     return z - ndimage.uniform_filter(z, size=taille)
 
 
-def calculer(alt, ph, masque):
+def calculer(alt, ph):
+    """Bandes de relief et de sol sur toute la grille (France et pays voisins) : le modèle de l'étape 4
+    apprend aussi sur les observations faites de l'autre côté de la frontière."""
     pente, nordicite = pente_exposition(alt)
     tpi = position_topographique(alt)
+    tpi_large = position_topographique(alt, rayon_m=1000)
     alt = np.where(np.isnan(alt), 0, alt)
     return {
-        "altitude": np.where(masque, np.rint(alt), 0),
-        "pente": np.where(masque, np.rint(pente * 10), 0),       # dixièmes de degré
-        "nordicite": np.where(masque, np.rint(nordicite * 100), 0),  # -100 sud, +100 nord
-        "tpi": np.where(masque, np.rint(tpi), 0),                  # m : négatif = creux, positif = crête
-        "ph": np.where(masque, np.rint(ph * 10), 0),             # pH x 10
+        "altitude": np.rint(alt),
+        "pente": np.rint(pente * 10),               # dixièmes de degré
+        "nordicite": np.rint(nordicite * 100),      # -100 sud, +100 nord
+        "tpi": np.rint(tpi),                        # m, sur 300 m : négatif = creux, positif = crête
+        "tpi_large": np.rint(tpi_large),            # m, sur 1 km : fond de vallée ou sommet
+        "ph": np.rint(ph * 10),                     # pH x 10
     }
 
 
@@ -108,7 +113,7 @@ def main():
     print("pH du sol (SoilGrids)...")
     ph = ph_sol()
     print(f"  pH dans la zone : {np.nanpercentile(ph[masque], 5):.1f} à {np.nanpercentile(ph[masque], 95):.1f}")
-    bandes = calculer(alt, ph, masque)
+    bandes = calculer(alt, ph)
     ecrire_bandes(DATA / "relief_sol.tif", bandes, "int16")
     print("Relief et sol enregistrés.")
 

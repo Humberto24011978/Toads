@@ -23,7 +23,14 @@ import numpy as np
 
 PARAMS = {
     #                 délai (jours)  marge  T sol pousse (°C)  marge  T sol min aujourd'hui  effet du gel
-    "cepe":             dict(delai=(6, 20), marge_delai=8, tsol=(9, 17), marge_t=4, tsol_actuel=4, gel=.3),
+    # Cèpe de Bordeaux : fin d'été et automne, après un coup de frais ; tient jusqu'aux premières vraies gelées
+    "cepe_bordeaux":    dict(delai=(6, 20), marge_delai=8, tsol=(8, 16), marge_t=4, tsol_actuel=4, gel=.3),
+    # Cèpe d'été : dès la fin du printemps, après les orages, sur un sol bien réchauffé
+    "cepe_ete":         dict(delai=(5, 16), marge_delai=7, tsol=(14, 21), marge_t=4, tsol_actuel=10, gel=.2),
+    # Cèpe bronzé : le plus frileux, plein été et début d'automne
+    "cepe_bronze":      dict(delai=(6, 18), marge_delai=7, tsol=(15, 22), marge_t=4, tsol_actuel=11, gel=.2),
+    # Cèpe des pins : deux poussées, au printemps puis en automne, par temps frais
+    "cepe_pins":        dict(delai=(6, 20), marge_delai=8, tsol=(7, 15), marge_t=4, tsol_actuel=4, gel=.4),
     "girolle":          dict(delai=(5, 21), marge_delai=8, tsol=(11, 19), marge_t=4, tsol_actuel=6, gel=.3),
     "trompette":        dict(delai=(7, 25), marge_delai=8, tsol=(7, 15), marge_t=4, tsol_actuel=3, gel=.6),
     "chanterelle_tube": dict(delai=(7, 28), marge_delai=10, tsol=(4, 13), marge_t=4, tsol_actuel=1, gel=.8),
@@ -37,7 +44,10 @@ PARAMS = {
 
 # Coefficient de saison (mois -> 0 à 1) : souple, c'est surtout la météo qui décide
 SAISON = {
-    "cepe":             {5: .2, 6: .6, 7: 1, 8: 1, 9: 1, 10: 1, 11: .8, 12: .3},
+    "cepe_bordeaux":    {6: .15, 7: .5, 8: .8, 9: 1, 10: 1, 11: .8, 12: .3},
+    "cepe_ete":         {5: .5, 6: 1, 7: 1, 8: 1, 9: .8, 10: .35},
+    "cepe_bronze":      {6: .4, 7: .9, 8: 1, 9: 1, 10: .5},
+    "cepe_pins":        {4: .2, 5: .8, 6: .8, 7: .3, 8: .5, 9: 1, 10: 1, 11: .6},
     "girolle":          {5: .3, 6: .8, 7: 1, 8: 1, 9: 1, 10: 1, 11: .5, 12: .1},
     "trompette":        {7: .3, 8: .7, 9: 1, 10: 1, 11: 1, 12: .6, 1: .2},
     "chanterelle_tube": {8: .4, 9: 1, 10: 1, 11: 1, 12: 1, 1: .5, 2: .2},
@@ -49,7 +59,7 @@ SAISON = {
 }
 
 # Réserve en eau du sol : part minimale gardée quand le sol est sec en profondeur (0 = effet maximal)
-PLANCHER_SOL = {"cepe": .3, "girolle": .3, "trompette": .35, "chanterelle_tube": .35, "pied_de_mouton": .35, "morille": .4,
+PLANCHER_SOL = {"cepe_bordeaux": .3, "cepe_ete": .3, "cepe_bronze": .3, "cepe_pins": .3, "girolle": .3, "trompette": .35, "chanterelle_tube": .35, "pied_de_mouton": .35, "morille": .4,
                 "coulemelle": .5, "rose_des_pres": .6, "coprin": .65}
 RESERVE_UTILE = 100.0      # mm d'eau utilisables par les racines et le mycélium (sol forestier moyen)
 CLASSES_RU = [30, 50, 75, 100, 140, 200]   # mm : le bilan est calculé pour chaque classe de sol

@@ -1,13 +1,14 @@
-"""Étape quotidienne : météo des trois dernières semaines et cartes du jour.
+"""Étape quotidienne : météo des trente derniers jours, prévisions et cartes du jour.
 
-Source : Open-Meteo (gratuit, sans clé) : pluie, température de l'air et du sol sur 30 jours.
+Source : Open-Meteo (gratuit, sans clé) : pluie, température de l'air et du sol, évaporation.
 L'indice de chaque espèce (voir indice_meteo.py) est calculé à plusieurs altitudes,
 puis chaque carré de 100 m prend la valeur de son altitude. Il multiplie le score de potentiel.
 
-Résultats :
-- site/cartes/<espece>_jour.png : la carte du jour
-- site/cartes/<espece>_potentiel.png : le potentiel toute saison
-- site/cartes/info.json : date, emprise et état des conditions par espèce
+Résultats (dossier site/cartes) :
+- <espece>_potentiel.png et <espece>_j0.png à _j7.png : potentiel toute saison, carte du jour et des 7 jours suivants
+  (une couleur par tranche de 4 points : le site retrouve le score d'un point à partir de sa couleur) ;
+- secteurs_<espece>_*.json : meilleurs secteurs, avec leur statut (forêt publique ou non) ;
+- info.json : date, emprise, météo, prévisions, groupes d'espèces, fiabilité des cartes.
 """
 import datetime as dt
 import json
@@ -18,13 +19,12 @@ import ephem
 import numpy as np
 from PIL import Image
 from pyproj import Transformer
-from rasterio.transform import from_origin
-from rasterio.warp import Resampling, calculate_default_transform, reproject, transform_bounds
+from rasterio.warp import calculate_default_transform, transform_bounds
 from scipy import ndimage
 
 import indice_meteo as im
-from commun import (BBOX, COLS, CRS, DATA, ESPECES, LIGNES, PAS, SITE, TRANSFORM, X0, X1, Y0, Y1, ecrire_json, get,
-                    lire_bandes)
+from commun import (BBOX, COLS, CRS, DATA, ESPECES, GROUPES, LIGNES, PAS, SITE, X0, X1, Y0, Y1, ecrire_json, get,
+                    lire_bandes, membres)
 
 API = "https://api.open-meteo.com/v1/forecast"
 ARCHIVE = "https://archive-api.open-meteo.com/v1/archive"
@@ -41,7 +41,8 @@ GRADIENT_AIR, GRADIENT_SOL = 0.0065, 0.0055
 # Altitudes de calcul : l'indice est calculé à chaque niveau, puis chaque carré prend celui de son altitude
 NIVEAUX = np.arange(100, 1501, 100)
 # Trouvailles personnelles (secret GitHub TROUVAILLES) : leur indice est affiché, sans le lieu
-CONTROLES = [(t["espece"], t["lat"], t["lon"]) for t in json.loads(os.environ.get("TROUVAILLES", "").strip() or "[]")]
+CONTROLES = [(t["espece"], t["lat"], t["lon"]) for t in json.loads(os.environ.get("TROUVAILLES", "").strip() or "[]")
+             if not t.get("absent")]
 
 
 def points_meteo():
@@ -125,11 +126,11 @@ def preparer_sol():
     return bas, np.minimum(bas + 1, len(cl) - 1).astype("int8"), (pos - bas).astype("float32"), ru
 
 
-def humidite_grille(m, k, sol):
+def humidite_grille(m, k, sol, geo):
     """État du sol pour la pousse au jour k (0 sec à 1 bien pourvu), carré par carré, selon sa réserve utile."""
     bas, haut, f, _ = sol
     col = JOURS_PASSES + k
-    par_classe = np.stack([vers_grille(im.humidite_sol(m["reserve"][c], col), m["forme"])
+    par_classe = np.stack([vers_grille(im.humidite_sol(m["reserve"][c], col), m["forme"], geo)
                            for c in range(len(im.CLASSES_RU))])
     lig, cols = np.indices(bas.shape)
     return par_classe[bas, lig, cols] * (1 - f) + par_classe[haut, lig, cols] * f
@@ -160,22 +161,26 @@ def secheresse():
         return {}
 
 
-def vers_grille(valeurs, forme):
-    """Interpole un champ météo (grille en degrés) sur la grille Lambert-93 de 100 m."""
+def preparer_geometrie(altitude):
+    """Position de chaque carré de 100 m dans la grille météo (ligne, colonne) et dans les niveaux d'altitude.
+
+    Calculée une seule fois : chaque carte du jour se fait ensuite en une interpolation.
+    """
     lons, lats = points_meteo()
-    src = valeurs.reshape(forme).astype("float32")
-    t = from_origin(lons[0] - PAS_METEO[0] / 2, lats[0] + PAS_METEO[1] / 2, *PAS_METEO)
-    dst = np.zeros((LIGNES, COLS), dtype="float32")
-    reproject(src, dst, src_transform=t, src_crs="EPSG:4326", dst_transform=TRANSFORM, dst_crs=CRS,
-              resampling=Resampling.bilinear)
-    return dst
+    lig, col = np.indices((LIGNES, COLS), dtype="float32")
+    x = X0 + (col + 0.5) * PAS
+    y = Y1 - (lig + 0.5) * PAS
+    lon, lat = Transformer.from_crs(CRS, 4326, always_xy=True).transform(x, y)
+    fc = ((lon - lons[0]) / PAS_METEO[0]).astype("float32")
+    fl = ((lats[0] - lat) / PAS_METEO[1]).astype("float32")
+    niv = np.clip((altitude - NIVEAUX[0]) / (NIVEAUX[1] - NIVEAUX[0]), 0, len(NIVEAUX) - 1).astype("float32")
+    return np.stack([niv, fl, fc])
 
 
-def interpolation_altitude(altitude):
-    """Prépare le passage des niveaux d'altitude de calcul à l'altitude de chaque carré."""
-    pos = np.clip((altitude - NIVEAUX[0]) / (NIVEAUX[1] - NIVEAUX[0]), 0, len(NIVEAUX) - 1)
-    bas = np.floor(pos).astype(int)
-    return bas, np.minimum(bas + 1, len(NIVEAUX) - 1), (pos - bas).astype("float32"), np.indices(altitude.shape)
+def vers_grille(valeurs, forme, geo):
+    """Interpole un champ météo (grille en degrés) sur la grille Lambert-93 de 100 m."""
+    return ndimage.map_coordinates(valeurs.reshape(forme).astype("float32"), geo[1:], order=1, mode="nearest",
+                                   output=np.float32)
 
 
 def series_jour(m, k):
@@ -184,17 +189,16 @@ def series_jour(m, k):
     return m["pluie"][:, i - 30:i + 1], m["tsol"][:, i - 30:i + 1], m["tmin"][:, i - 30:i + 1]
 
 
-def indice_grille(espece, m, k, mois, interp):
+def indice_grille(espece, m, k, mois, geo):
     """Indice du jour k sur la grille de 100 m, en tenant compte de l'altitude de chaque carré."""
     pluie, tsol, tmin = series_jour(m, k)
-    niveaux = []
+    cube = []
     for z in NIVEAUX:
         ecart = (m["alt"] - z)[:, None]
-        ind = im.indice(espece, pluie, tsol + GRADIENT_SOL * ecart, tmin + GRADIENT_AIR * ecart, mois)
-        niveaux.append(vers_grille(ind, m["forme"]))
-    niveaux = np.stack(niveaux)
-    bas, haut, f, (lig, col) = interp
-    return np.clip(niveaux[bas, lig, col] * (1 - f) + niveaux[haut, lig, col] * f, 0, 1)
+        cube.append(im.indice(espece, pluie, tsol + GRADIENT_SOL * ecart, tmin + GRADIENT_AIR * ecart, mois)
+                    .reshape(m["forme"]))
+    cube = np.stack(cube).astype("float32")
+    return np.clip(ndimage.map_coordinates(cube, geo, order=1, mode="nearest", output=np.float32), 0, 1)
 
 
 # Palette sur 1000 : jaune pâle -> orange -> rouge -> prune ; transparent sous le seuil
@@ -202,41 +206,56 @@ PALETTE = [(80, (246, 226, 122, 115)), (200, (244, 163, 64, 165)), (400, (217, 6
            (650, (130, 30, 75, 225)), (1000, (70, 10, 45, 240))]
 SEUIL = 80
 MAX = 1000
+PAS_COULEUR = 4            # une couleur par tranche de 4 points : 250 couleurs, images 3 à 4 fois plus légères
+
+
+def couleur(v):
+    for (a, ca), (b, cb) in zip(PALETTE[:-1], PALETTE[1:]):
+        if a <= v <= b:
+            t = (v - a) / (b - a)
+            return [round(ca[k] + t * (cb[k] - ca[k])) for k in range(4)]
+    return [0, 0, 0, 0]
 
 
 def table_couleurs():
-    lut = np.zeros((MAX + 1, 4), dtype=np.uint8)
-    for v in range(SEUIL, MAX + 1):
-        x = v
-        for (a, ca), (b, cb) in zip(PALETTE[:-1], PALETTE[1:]):
-            if a <= x <= b:
-                t = (x - a) / (b - a)
-                lut[v] = [round(ca[k] + t * (cb[k] - ca[k])) for k in range(4)]
-                break
-    return lut
+    """Couleur (rouge, vert, bleu, opacité) de chaque tranche ; la tranche 0 est transparente."""
+    return [[0, 0, 0, 0]] + [couleur(min(i * PAS_COULEUR, MAX)) if i * PAS_COULEUR >= SEUIL else [0, 0, 0, 0]
+                             for i in range(1, MAX // PAS_COULEUR + 1)]
 
 
 def preparer_mercator():
-    """Grille Web Mercator (celle des cartes en ligne) couvrant la zone."""
+    """Grille Web Mercator (celle des cartes en ligne) couvrant la zone, et le carré de 100 m de chaque pixel."""
     t, w, h = calculate_default_transform(CRS, "EPSG:3857", COLS, LIGNES, left=X0, bottom=Y0, right=X1, top=Y1,
                                           resolution=150)
     gauche, haut = t.c, t.f
     droite, bas = gauche + w * t.a, haut + h * t.e
     ouest, sud, est, nord = transform_bounds("EPSG:3857", "EPSG:4326", gauche, bas, droite, haut)
-    return t, w, h, [[sud, ouest], [nord, est]]
+    lig, col = np.indices((h, w), dtype="float64")
+    x, y = Transformer.from_crs("EPSG:3857", CRS, always_xy=True).transform(gauche + (col + 0.5) * t.a,
+                                                                             haut + (lig + 0.5) * t.e)
+    c = np.floor((x - X0) / PAS).astype(np.int64)
+    li = np.floor((Y1 - y) / PAS).astype(np.int64)
+    dedans = (c >= 0) & (c < COLS) & (li >= 0) & (li < LIGNES)
+    indices = np.where(dedans, li * COLS + c, -1)
+    return {"indices": indices, "dedans": dedans, "bornes": [[sud, ouest], [nord, est]],
+            "mercator": {"gauche": gauche, "haut": haut, "pas": t.a, "largeur": int(w), "hauteur": int(h)}}
 
 
-def image(grille, t, w, h, lut, chemin):
-    dst = np.zeros((h, w), dtype="float32")
-    reproject(grille.astype("float32"), dst, src_transform=TRANSFORM, src_crs=CRS, src_nodata=0,
-              dst_transform=t, dst_crs="EPSG:3857", dst_nodata=0, resampling=Resampling.bilinear)
-    Image.fromarray(lut[np.clip(np.rint(dst), 0, MAX).astype(np.int32)], "RGBA").save(chemin, optimize=True)
+def image(grille, merc, table, chemin):
+    """Carte en PNG à palette : chaque pixel porte le score de son carré de 100 m, arrondi à 4 points près."""
+    v = np.zeros(merc["indices"].shape, dtype="float32")
+    v[merc["dedans"]] = grille.ravel()[merc["indices"][merc["dedans"]]]
+    tranche = np.where(v >= SEUIL, np.clip(np.ceil(v / PAS_COULEUR), 1, MAX // PAS_COULEUR), 0).astype("uint8")
+    img = Image.fromarray(tranche, "P")
+    img.putpalette([x for c in table for x in c[:3]])
+    img.save(chemin, transparency=bytes(c[3] for c in table))
 
 
-def secteurs(grille, seuil, rayon=6):
+def secteurs(grille, seuil, statut=None, rayon=6):
     """Meilleurs secteurs d'une carte : moyenne sur 300 m, puis un seul point par voisinage de ~1,2 km.
 
-    Renvoie [[lat, lon, score], ...] du meilleur au moins bon.
+    Renvoie [[lat, lon, score, statut], ...] du meilleur au moins bon ; statut : 0 forêt privée ou statut
+    inconnu, 1 forêt domaniale, 2 autre forêt publique.
     """
     lisse = ndimage.uniform_filter(grille.astype("float32"), size=3)
     lig, col = np.nonzero(lisse >= seuil)
@@ -256,7 +275,9 @@ def secteurs(grille, seuil, rayon=6):
     y = Y1 - (lig[choisis] + 0.5) * PAS
     lon, lat = Transformer.from_crs(CRS, 4326, always_xy=True).transform(x, y)
     valeurs = lisse[lig[choisis], col[choisis]]
-    return [[round(float(a), 4), round(float(o), 4), int(round(float(v)))] for a, o, v in zip(lat, lon, valeurs)]
+    st = statut[lig[choisis], col[choisis]] if statut is not None else np.zeros(len(choisis), int)
+    return [[round(float(a), 4), round(float(o), 4), int(round(float(v))), int(s)]
+            for a, o, v, s in zip(lat, lon, valeurs, st)]
 
 
 PHASES = [("Nouvelle lune", "🌑"), ("Premier croissant", "🌒"), ("Premier quartier", "🌓"),
@@ -308,6 +329,30 @@ def niveau(ind_grille, potentiel, zone):
     return float(np.mean(valeurs)), float(np.percentile(valeurs, 90))
 
 
+ORDRE_STATUTS = ["hors saison", "peu probable en ce moment", "conditions moyennes", "bon moment"]
+
+
+def fiabilite():
+    """Fiabilité de la carte de potentiel de chaque espèce, d'après la validation de l'étape 4."""
+    chemin = DATA / "scores_resume.json"
+    if not chemin.exists():
+        return {}
+    sortie = {}
+    for e, r in json.loads(chemin.read_text(encoding="utf-8")).items():
+        auc, n = r.get("auc"), r.get("observations", 0)
+        if auc is None or n < 40:
+            niveau_txt = "indicative"
+        elif auc >= 0.75:
+            niveau_txt = "bonne"
+        elif auc >= 0.65:
+            niveau_txt = "correcte"
+        else:
+            niveau_txt = "indicative"
+        sortie[e] = {"niveau": niveau_txt, "auc": auc, "observations": n,
+                     "observations_region": r.get("observations_region")}
+    return sortie
+
+
 def main():
     if not (DATA / "scores.tif").exists():
         print("Pas encore de scores : lancez d'abord la préparation des données.")
@@ -316,7 +361,8 @@ def main():
     masque = lire_bandes(DATA / "occupation.tif")["masque"] > 0
     zone = masque_zone(masque)
     altitude = lire_bandes(DATA / "relief_sol.tif")["altitude"].astype("float32")
-    interp = interpolation_altitude(altitude)
+    publique = lire_bandes(DATA / "acces.tif")["publique"] if (DATA / "acces.tif").exists() else None
+    geo = preparer_geometrie(altitude)
     aujourdhui = dt.datetime.now(ZoneInfo("Europe/Paris")).date()
     dates = [aujourdhui + dt.timedelta(days=k) for k in range(JOURS_PREVUS + 1)]
     print(f"Météo du {aujourdhui} et prévisions à {JOURS_PREVUS} jours...")
@@ -325,7 +371,7 @@ def main():
     try:
         m["reserve"] = reserve_sol(m, aujourdhui)
         sol = preparer_sol()
-        humidite = {k: humidite_grille(m, k, sol) for k in range(len(dates))}
+        humidite = {k: humidite_grille(m, k, sol, geo) for k in range(len(dates))}
     except Exception as e:      # sans archives, on garde l'indice sans réserve en eau
         print(f"  indisponible : {e}")
         m["reserve"], sol, humidite = None, None, {}
@@ -337,25 +383,38 @@ def main():
         vieux.unlink()
     for vieux in sortie.glob("secteurs_*.json"):
         vieux.unlink()
-    t, w, h, bornes = preparer_mercator()
-    lut = table_couleurs()
+    merc = preparer_mercator()
+    table = table_couleurs()
     infos, previsions = {}, {}
-    controles = [(e, case(lat, lon)) for e, lat, lon in CONTROLES]
-    for espece, nom in ((k, v["nom"]) for k, v in ESPECES.items()):
+    groupe_de = {e: g for g in GROUPES for e in membres(g)}
+    # Cartes des groupes (« tous les cèpes ») : meilleur score pondéré de leurs membres, carré par carré
+    cumul = {g: {} for g in GROUPES}
+    controles = [(e2, case(lat, lon), n) for n, (e, lat, lon) in enumerate(CONTROLES, start=1) for e2 in membres(e)]
+
+    def publier(cle, nom_carte, carte, seuil):
+        image(carte, merc, table, sortie / f"{cle}_{nom_carte}.png")
+        ecrire_json(sortie / f"secteurs_{cle}_{nom_carte}.json", secteurs(carte, seuil, publique))
+
+    for espece, e in ESPECES.items():
+        nom = e["nom"]
         if espece not in scores:
             print(f"{nom} : pas encore de score, ignorée")
             continue
         potentiel = scores[espece]
-        image(potentiel, t, w, h, lut, sortie / f"{espece}_potentiel.png")
-        ecrire_json(sortie / f"secteurs_{espece}_potentiel.json", secteurs(potentiel, 400))
+        g = groupe_de.get(espece)
+        poids = GROUPES[g]["poids"][espece] if g else 1
+        publier(espece, "potentiel", potentiel, 400)
+        if g:
+            cumul[g]["potentiel"] = np.maximum(cumul[g].get("potentiel", 0), potentiel.astype("float32") * poids)
         prev = {"zone": [], "region": [], "statut": []}
         for k, jour_k in enumerate(dates):
-            ind_grille = indice_grille(espece, m, k, jour_k.month, interp)
+            ind_grille = indice_grille(espece, m, k, jour_k.month, geo)
             if k in humidite:          # réserve en eau du sol en profondeur, selon le sol de chaque carré
                 ind_grille = ind_grille * im.effet_sol(espece, humidite[k]).astype("float32")
             carte = potentiel.astype("float32") * ind_grille        # sur 1000
-            image(carte, t, w, h, lut, sortie / f"{espece}_j{k}.png")
-            ecrire_json(sortie / f"secteurs_{espece}_j{k}.json", secteurs(carte, 120))
+            publier(espece, f"j{k}", carte, 120)
+            if g:
+                cumul[g][k] = np.maximum(cumul[g].get(k, 0), carte * poids)
             moy_r, p90_r = niveau(ind_grille, potentiel, masque)
             _, p90_z = niveau(ind_grille, potentiel, zone)
             f_saison = im.SAISON[espece].get(jour_k.month, 0)
@@ -365,12 +424,36 @@ def main():
             if k == 0:
                 infos[espece] = {"nom": nom, "indice": round(moy_r * 1000), "indice_meilleur": round(p90_r * 1000),
                                  "statut": statut(p90_r, f_saison), "saison": f_saison > 0}
-                for n, (e, (lc, cc)) in enumerate(controles, start=1):
-                    if e == espece and 0 <= lc < LIGNES and 0 <= cc < COLS:
+                if g:
+                    infos[espece].update(groupe=g, court=e.get("court", nom))
+                for e2, (lc, cc), n in controles:
+                    if e2 == espece and 0 <= lc < LIGNES and 0 <= cc < COLS:
                         print(f"  trouvaille personnelle n° {n} : indice {ind_grille[lc, cc]:.2f}, "
                               f"potentiel {potentiel[lc, cc]}, carte du jour {carte[lc, cc]:.0f}")
         previsions[espece] = prev
         print(f"{nom} : aujourd'hui {infos[espece]['statut']} ; région {prev['region']} ; {ZONE['nom']} {prev['zone']}")
+
+    # Groupes : cartes combinées et résumé (meilleur de leurs membres)
+    groupes = {}
+    for g, def_g in GROUPES.items():
+        presents = [e for e in membres(g) if e in infos]
+        if not presents or "potentiel" not in cumul[g]:
+            continue
+        publier(g, "potentiel", cumul[g]["potentiel"], 400)
+        for k in range(len(dates)):
+            publier(g, f"j{k}", cumul[g][k], 120)
+        pond = lambda e, cle, k: previsions[e][cle][k] * def_g["poids"][e]
+        previsions[g] = {
+            "zone": [round(max(pond(e, "zone", k) for e in presents)) for k in range(len(dates))],
+            "region": [round(max(pond(e, "region", k) for e in presents)) for k in range(len(dates))],
+            "statut": [max((previsions[e]["statut"][k] for e in presents), key=ORDRE_STATUTS.index)
+                       for k in range(len(dates))],
+        }
+        infos[g] = {"nom": def_g["nom"], "indice": max(infos[e]["indice"] for e in presents),
+                    "indice_meilleur": max(infos[e]["indice_meilleur"] for e in presents),
+                    "statut": previsions[g]["statut"][0], "saison": any(infos[e]["saison"] for e in presents)}
+        groupes[g] = {"nom": def_g["nom"], "tous": def_g["tous"], "membres": presents}
+        print(f"{def_g['nom']} (groupe) : aujourd'hui {infos[g]['statut']} ; {ZONE['nom']} {previsions[g]['zone']}")
 
     # Résumé météo des points dans la zone couverte (aujourd'hui = colonne JOURS_PASSES)
     lons, lats = points_meteo()
@@ -392,7 +475,9 @@ def main():
     pluie_passee = m["pluie"][:, :a + 1]
     ecrire_json(sortie / "info.json", {
         "date": aujourdhui.isoformat(),
-        "bornes": bornes,
+        "bornes": merc["bornes"],
+        "mercator": merc["mercator"],
+        "couleurs": {"pas": PAS_COULEUR, "seuil": SEUIL, "table": table},
         "meteo": {
             "pluie_14j_mm": round(float(np.mean(np.nansum(m["pluie"][:, a - 14:a], axis=1)[dans_zone])), 1),
             "temperature_7j": round(float(np.nanmean(tmoy7[dans_zone])), 1),
@@ -406,6 +491,9 @@ def main():
         "lune": lune(aujourdhui),
         "previsions": {"dates": [d.isoformat() for d in dates], "zone": ZONE, "especes": previsions},
         "especes": infos,
+        "groupes": groupes,
+        "fiabilite": fiabilite(),
+        "acces": publique is not None,
     })
     print("Cartes du jour et prévisions prêtes.")
 
