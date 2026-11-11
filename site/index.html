@@ -35,6 +35,20 @@
   .suggestions button:hover, .suggestions button.actif { background: #f1eee6; }
   .suggestions .type, .suggestions .vide { color: var(--gris); font-size: 12px; }
   .suggestions .vide { padding: 8px 12px; }
+  .sous-especes { display: flex; flex-wrap: wrap; gap: 6px; margin: -6px 0 14px; padding: 8px; border-radius: 10px; background: #f1eee6; }
+  .sous-especes button { border: 1px solid var(--ligne); background: #fff; color: var(--encre); border-radius: 999px; padding: 5px 10px; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+  .sous-especes button[aria-pressed="true"] { background: var(--mousse); color: #fff; border-color: var(--mousse); }
+  .sous-especes .pt { width: 8px; height: 8px; border-radius: 50%; }
+  .option { display: flex; align-items: center; gap: 8px; font-size: 13.5px; margin: 8px 0; cursor: pointer; }
+  .option input { width: 18px; height: 18px; }
+  .statut-coin { font-size: 11.5px; color: var(--gris); display: block; }
+  .ici { font-size: 13px; line-height: 1.5; min-width: 210px; }
+  .ici .gris { color: var(--gris); }
+  .ici .boutons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .ici button, .carnet button { border: 1px solid var(--ligne); background: #fff; border-radius: 8px; padding: 5px 9px; font-size: 12.5px; cursor: pointer; color: var(--encre); }
+  .carnet { margin: 14px 0; font-size: 13.5px; }
+  .carnet .ligne-carnet { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .fiabilite { font-size: 12.5px; color: var(--gris); margin: 0 0 8px; }
   label.titre { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: .6px; color: var(--gris); margin: 0 0 6px; }
   .especes { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
   .especes button {
@@ -127,6 +141,7 @@
 
     <label class="titre">Espèce</label>
     <div class="especes" id="especes"></div>
+    <div class="sous-especes" id="sous-especes" hidden></div>
 
     <div class="bascule" role="group" aria-label="Type de carte">
       <button id="mode-jour" aria-pressed="true">Prévisions</button>
@@ -156,19 +171,26 @@
         <input type="range" id="rayon" min="1" max="100" step="1" value="15" aria-label="Rayon de recherche en kilomètres">
         <span id="rayon-txt">15 km</span>
       </div>
+      <label class="option" id="option-publiques" hidden><input type="checkbox" id="publiques"> Forêts publiques seulement</label>
       <div class="resultats" id="resultats">
         <p class="aide">Touchez « Me localiser » pour voir les meilleurs coins autour de vous. Vous pourrez ensuite déplacer le point bleu,
         ou faire un clic droit (appui long sur téléphone) pour chercher autour d'un autre endroit.</p>
       </div>
     </div>
 
+    <div class="carnet" id="carnet"></div>
+
     <div class="fiche" id="fiche"></div>
 
     <div class="pied">
       La carte indique des zones favorables, jamais une certitude. Elle ne remplace pas l'identification :
-      en cas de doute, faites vérifier votre cueillette par un pharmacien ou une société mycologique.
-      Respectez la réglementation locale et les propriétés privées.<br>
-      Données : IGN (BD Forêt, Corine Land Cover), GBIF, Copernicus, ISRIC SoilGrids, Open-Meteo.
+      en cas de doute, faites vérifier votre cueillette par un pharmacien ou une société mycologique.<br>
+      En forêt publique, la cueillette familiale est en général tolérée (souvent 5 litres par personne et par jour) ;
+      en forêt privée, les champignons appartiennent au propriétaire. Les réserves naturelles et biologiques,
+      les sites protégés et les terrains militaires sont exclus de la carte par prudence. Vérifiez les règles locales.<br>
+      Touchez la carte pour savoir ce qu'il y a à un endroit précis.<br>
+      Données : IGN (BD Forêt, BD TOPO, LiDAR HD, Corine Land Cover), GBIF, Copernicus, ISRIC SoilGrids,
+      EcoDataCube (OpenGeoHub), Open-Meteo.
       <a href="https://github.com/Humberto24011978/Toads">Code source</a>.
     </div>
   </div>
@@ -179,9 +201,29 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 const FICHES = {
-  cepe: { latin: "Boletus edulis, B. aereus, B. reticulatus, B. pinophilus", periode: "juillet à novembre",
-    milieu: "Forêts de chênes, hêtres, châtaigniers, épicéas et pins", sol: "Plutôt acide (grès des Vosges)",
-    conseil: "Pousse une dizaine de jours après une bonne pluie, par temps doux." },
+  cepe: { latin: "Boletus edulis, B. reticulatus, B. aereus, B. pinophilus", periode: "mai à novembre selon l'espèce",
+    milieu: "Chênes, hêtres, châtaigniers, épicéas, sapins et pins", sol: "Plutôt acide (grès des Vosges)",
+    conseil: "Cette carte réunit les quatre cèpes. Choisissez une espèce ci-dessus pour des coins plus précis : elles n'ont ni les mêmes arbres ni la même saison." },
+  cepe_bordeaux: { latin: "Boletus edulis", periode: "août à novembre (parfois dès juillet en montagne)",
+    milieu: "Épicéas, sapins, hêtres, chênes ; plantations d'épicéas d'âge moyen, lisières, bords de chemins moussus",
+    sol: "Acide, frais ; plaine et montagne jusqu'aux crêtes",
+    conseil: "Le plus courant. Il sort une dizaine de jours après une bonne pluie suivie d'un coup de frais, et tient jusqu'aux premières vraies gelées.",
+    signes: "Chapeau brun noisette à bord plus clair, un peu gras par temps humide ; pied clair avec un fin réseau blanc en haut." },
+  cepe_ete: { latin: "Boletus reticulatus (= B. aestivalis)", periode: "fin mai à septembre",
+    milieu: "Chênes, hêtres, châtaigniers, charmes ; bois clairs, lisières, allées herbeuses, versants ensoleillés",
+    sol: "Peu exigeant, bien drainé ; plaine et collines, rare au-dessus de 800 m",
+    conseil: "Le premier de l'année : il sort quelques jours après les orages d'été, quand le sol est chaud. Souvent véreux par forte chaleur : cueillez-le jeune.",
+    signes: "Chapeau beige à brun clair, mat, velouté, qui se craquelle par temps sec ; pied couvert d'un réseau jusqu'en bas." },
+  cepe_bronze: { latin: "Boletus aereus", periode: "juillet à octobre",
+    milieu: "Chênes et châtaigniers des coteaux chauds et secs, bois clairs exposés au sud",
+    sol: "Acide à neutre, sec ; basse altitude (collines sous-vosgiennes, côtes)",
+    conseil: "Rare dans la région : la carte montre ses meilleurs coins, mais les chances restent plus faibles que pour les autres cèpes. Il aime les étés chauds.",
+    signes: "Chapeau très sombre, brun-noir (« tête-de-nègre »), sec et velouté ; pied brun-ocre à réseau fin ; chair ferme et blanche." },
+  cepe_pins: { latin: "Boletus pinophilus (= B. pinicola)", periode: "mai-juin, puis septembre à novembre",
+    milieu: "Pins sylvestres sur sable et grès (Vosges du Nord, forêt de Haguenau), sapins et épicéas d'altitude, parfois hêtres ; myrtilles et bruyères",
+    sol: "Très acide, pauvre, sableux",
+    conseil: "Deux poussées par an : une au printemps, une en automne par temps frais. Peu courant, mais fidèle à ses places.",
+    signes: "Chapeau brun-rouge acajou, souvent bosselé ; pied trapu, teinté de roux, à réseau." },
   girolle: { latin: "Cantharellus cibarius", periode: "juin à octobre",
     milieu: "Feuillus et résineux, souvent dans la mousse", sol: "Acide, bien drainé",
     conseil: "Revient au même endroit d'une année sur l'autre.",
@@ -224,21 +266,32 @@ const fonds = {
   "OpenStreetMap": L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 18, attribution: "© OpenStreetMap" }),
 };
 fonds["Plan IGN"].addTo(carte);
-L.control.layers(fonds, null, { position: "topright" }).addTo(carte);
+const calques = { "Forêts publiques (ONF)": L.tileLayer(wmts("FORETS.PUBLIQUES", "image/png"), { maxZoom: 18, minZoom: 9, opacity: 0.55, attribution: "© ONF" }) };
+L.control.layers(fonds, calques, { position: "topright" }).addTo(carte);
 
 let info = null, couche = null, espece = "cepe", mode = "jour", jourSel = 0;
 try { espece = localStorage.getItem("toads-espece") || espece; mode = localStorage.getItem("toads-mode") || mode; } catch (e) {}
 
+const groupeDe = (cle) => (info.groupes && info.groupes[cle]) ? cle : (info.especes[cle] && info.especes[cle].groupe) || null;
 function boutonsEspeces() {
-  const zone = document.getElementById("especes");
+  const zone = document.getElementById("especes"), sous = document.getElementById("sous-especes");
   zone.innerHTML = "";
-  for (const [cle, e] of Object.entries(info.especes)) {
-    const b = document.createElement("button");
-    b.setAttribute("aria-pressed", cle === espece);
-    b.innerHTML = `<span class="pt" style="background:${COULEURS[e.statut]}"></span>${e.nom}`;
+  const groupes = info.groupes || {}, gCourant = groupeDe(espece);
+  const bouton = (parent, cle, texte, actif) => {
+    const e = info.especes[cle], b = document.createElement("button");
+    b.setAttribute("aria-pressed", actif);
+    b.innerHTML = `<span class="pt" style="background:${COULEURS[e.statut]}"></span>${texte}`;
     b.onclick = () => { espece = cle; enregistrer(); afficher(); };
-    zone.appendChild(b);
-  }
+    parent.appendChild(b);
+  };
+  for (const g of Object.keys(groupes)) if (info.especes[g]) bouton(zone, g, groupes[g].nom, g === gCourant);
+  for (const [cle, e] of Object.entries(info.especes)) if (!e.groupe && !groupes[cle]) bouton(zone, cle, e.nom, cle === espece);
+  sous.innerHTML = "";
+  if (gCourant && groupes[gCourant]) {
+    bouton(sous, gCourant, groupes[gCourant].tous, espece === gCourant);
+    for (const m of groupes[gCourant].membres) bouton(sous, m, info.especes[m].court || info.especes[m].nom, espece === m);
+    sous.hidden = false;
+  } else sous.hidden = true;
 }
 
 function enregistrer() {
@@ -258,6 +311,7 @@ function afficherAvenir() {
   if (!info.previsions) { zone.hidden = true; return; }
   const dates = info.previsions.dates, maintenant = [], avenir = [];
   for (const [cle, p] of Object.entries(info.previsions.especes)) {
+    if (info.groupes && info.groupes[cle]) continue;      // on annonce chaque cèpe, pas le groupe
     const v = p.zone, max = Math.max(...v.slice(1)), k = v.indexOf(max, 1);
     const nom = info.especes[cle] ? info.especes[cle].nom : cle;
     if (v[0] >= 300) maintenant.push({ cle, nom, force: v[0] });
@@ -317,9 +371,10 @@ function texteSol(m) {
 
 function afficher() {
   if (!info.especes[espece]) espece = Object.keys(info.especes)[0];
-  const e = info.especes[espece], f = FICHES[espece], m = info.meteo, p = prevEspece(espece);
+  const e = info.especes[espece], f = FICHES[espece] || FICHES.cepe, m = info.meteo, p = prevEspece(espece);
   if (!p) jourSel = 0;
   boutonsEspeces();
+  document.getElementById("option-publiques").hidden = !info.acces;
   afficherAvenir();
   afficherJours();
   document.getElementById("mode-jour").setAttribute("aria-pressed", mode === "jour");
@@ -365,10 +420,15 @@ function afficher() {
 
   if (centre) chercherAutour(false);
 
+  const fi = info.fiabilite && info.fiabilite[espece];
+  const fiab = fi ? `<p class="fiabilite">Fiabilité de la carte de potentiel : <b>${fi.niveau}</b> (${fi.observations.toLocaleString("fr-FR")} coins observés avec précision` +
+    (fi.observations_region != null ? `, dont ${fi.observations_region.toLocaleString("fr-FR")} dans la région` : "") + `).</p>` : "";
   document.getElementById("fiche").innerHTML =
-    `<h2>${e.nom}</h2><div class="latin">${f.latin}</div>
-     <dl><dt>Saison</dt><dd>${f.periode}</dd><dt>Milieu</dt><dd>${f.milieu}</dd><dt>Sol</dt><dd>${f.sol}</dd></dl>
-     <p style="margin:0 0 8px">${f.conseil}</p>` + (f.attention ? `<div class="attention">⚠️ ${f.attention}</div>` : "");
+    `<h2>${e.nom === "Cèpes" ? "Tous les cèpes" : e.nom}</h2><div class="latin">${f.latin}</div>
+     <dl><dt>Saison</dt><dd>${f.periode}</dd><dt>Milieu</dt><dd>${f.milieu}</dd><dt>Sol</dt><dd>${f.sol}</dd>` +
+    (f.signes ? `<dt>Le reconnaître</dt><dd>${f.signes}</dd>` : "") + `</dl>
+     <p style="margin:0 0 8px">${f.conseil}</p>` + fiab + (f.attention ? `<div class="attention">⚠️ ${f.attention}</div>` : "");
+  afficherCarnet();
 }
 
 document.getElementById("mode-jour").onclick = () => { mode = "jour"; enregistrer(); afficher(); };
@@ -436,10 +496,10 @@ async function chercherAutour(ajuster) {
   const tous = Array.isArray(donnees) ? donnees : (donnees[mode] || []);
   const proches = [];
   let plusProche = Infinity;
-  for (const [lat, lng, s] of tous) {
+  for (const [lat, lng, s, st] of tous) {
     const d = distanceKm(centre, { lat, lng });
     if (d < plusProche) plusProche = d;
-    if (d <= rayon) proches.push({ lat, lng, s, d });
+    if (d <= rayon && (!publiquesSeules || st > 0)) proches.push({ lat, lng, s, d, st: st || 0 });
   }
   proches.sort((a, b) => b.s - a.s || a.d - b.d);
   const meilleurs = proches.slice(0, NB_COINS);
@@ -449,7 +509,8 @@ async function chercherAutour(ajuster) {
     const lien = `https://www.google.com/maps/dir/?api=1&destination=${c.lat},${c.lng}`;
     return L.marker([c.lat, c.lng], { zIndexOffset: 500 - i,
       icon: L.divIcon({ className: "coin", html: `<span style="background:${couleurScore(c.s)}">${i + 1}</span>`, iconSize: [30, 30], iconAnchor: [15, 15] }) })
-      .bindPopup(`<b>Coin n° ${i + 1}</b> · score ${c.s}/1000<br>${km(c.d)} ${direction(centre, c)}<br><a href="${lien}" target="_blank" rel="noopener">Itinéraire</a>`)
+      .bindPopup(`<b>Coin n° ${i + 1}</b> · score ${c.s}/1000<br>${km(c.d)} ${direction(centre, c)}` +
+        (info.acces ? `<br>${STATUTS_FORET[c.st]}` : "") + `<br><a href="${lien}" target="_blank" rel="noopener">Itinéraire</a>`)
       .addTo(groupeCoins);
   });
 
@@ -458,13 +519,15 @@ async function chercherAutour(ajuster) {
   if (!meilleurs.length) {
     let msg;
     if (plusProche > 100) msg = "Vous êtes hors de la zone couverte (Alsace, Lorraine, Vosges). Déplacez le point bleu dans la zone.";
+    else if (publiquesSeules && tous.length) msg = `Aucun coin favorable en forêt publique pour : ${nom}, dans ce rayon. Agrandissez le rayon ou décochez « Forêts publiques seulement ».`;
     else if (mode === "jour") msg = `Aucun coin favorable ${jourSel === 0 ? "aujourd'hui" : "ce jour-là"} pour : ${nom}, dans ce rayon. Agrandissez le rayon, choisissez un autre jour ou passez en mode « Potentiel ».`;
     else msg = `Aucun coin favorable pour : ${nom}, dans ce rayon. Agrandissez le rayon.`;
     zone.innerHTML = `<p class="aide">${msg}</p>`;
     return;
   }
   zone.innerHTML = `<ol>${meilleurs.map((c, i) => `<li><button data-i="${i}"><span class="num" style="background:${couleurScore(c.s)}">${i + 1}</span>` +
-    `<span>Score ${c.s} <span class="km">· ${km(c.d)} ${direction(centre, c)}</span></span></button></li>`).join("")}</ol>`;
+    `<span>Score ${c.s} <span class="km">· ${km(c.d)} ${direction(centre, c)}</span>` +
+    (info.acces ? `<span class="statut-coin">${STATUTS_FORET[c.st]}</span>` : "") + `</span></button></li>`).join("")}</ol>`;
   zone.querySelectorAll("button").forEach((b) => b.onclick = () => {
     const m = marqueurs[+b.dataset.i];
     if (window.innerWidth <= 640 && !document.getElementById("panneau").classList.contains("plie")) document.getElementById("plier").click();
@@ -472,6 +535,17 @@ async function chercherAutour(ajuster) {
     m.openPopup();
   });
 }
+
+const STATUTS_FORET = ["Forêt privée ou statut non renseigné", "Forêt domaniale (publique)", "Forêt communale ou autre forêt publique"];
+let publiquesSeules = false;
+try { publiquesSeules = localStorage.getItem("toads-publiques") === "1"; } catch (e) {}
+const casePubliques = document.getElementById("publiques");
+casePubliques.checked = publiquesSeules;
+casePubliques.onchange = () => {
+  publiquesSeules = casePubliques.checked;
+  try { localStorage.setItem("toads-publiques", publiquesSeules ? "1" : "0"); } catch (e) {}
+  chercherAutour(false);
+};
 
 curseur.addEventListener("input", () => {
   rayon = +curseur.value; texteRayon.textContent = rayon + " km";
@@ -528,7 +602,7 @@ function allerA(l) {
   champRech.blur();
   const ll = L.latLng(l.lat, l.lng);
   if (marqueurLieu) carte.removeLayer(marqueurLieu);
-  marqueurLieu = L.circleMarker(ll, { radius: 7, color: "#fff", weight: 2, fillColor: "#2a5d8f", fillOpacity: 1 })
+  marqueurLieu = L.circleMarker(ll, { bubblingMouseEvents: false, radius: 7, color: "#fff", weight: 2, fillColor: "#2a5d8f", fillOpacity: 1 })
     .bindTooltip(sur(l.nom), { permanent: true, direction: "top", offset: [0, -8] }).addTo(carte);
   carte.setView(ll, 14);
   placerCentre(ll, false);          // « Autour de moi » cherche alors autour de ce lieu
@@ -555,6 +629,124 @@ champRech.addEventListener("keydown", (ev) => {
   } else if (ev.key === "Enter") { ev.preventDefault(); allerA(lieux[Math.max(choixLieu, 0)]); }
 });
 document.addEventListener("click", (ev) => { if (!ev.target.closest(".recherche")) listeRech.hidden = true; });
+
+// ---- Toucher la carte : score, forêt, statut et altitude de l'endroit ----
+const RAYON_TERRE = 6378137;
+const imagesLues = {};
+const pixel = document.createElement("canvas");
+pixel.width = pixel.height = 1;
+const ctxPixel = pixel.getContext("2d", { willReadFrequently: true });
+function chargerImage(fichier) {
+  if (!imagesLues[fichier]) {
+    const cles = Object.keys(imagesLues);
+    if (cles.length >= 2) delete imagesLues[cles[0]];
+    imagesLues[fichier] = new Promise((ok) => {
+      const i = new Image();
+      i.onload = () => ok(i); i.onerror = () => ok(null);
+      i.src = `cartes/${fichier}.png?d=${info.date}`;
+    });
+  }
+  return imagesLues[fichier];
+}
+// Le score d'un point se lit dans la couleur de son pixel (une couleur par tranche de 4 points)
+async function scoreAu(latlng, fichier) {
+  const m = info.mercator, c = info.couleurs;
+  if (!m || !c) return null;
+  const x = RAYON_TERRE * latlng.lng * Math.PI / 180, y = RAYON_TERRE * Math.log(Math.tan(Math.PI / 4 + latlng.lat * Math.PI / 360));
+  const px = Math.floor((x - m.gauche) / m.pas), py = Math.floor((m.haut - y) / m.pas);
+  if (px < 0 || py < 0 || px >= m.largeur || py >= m.hauteur) return null;
+  const img = await chargerImage(fichier);
+  if (!img) return null;
+  try {
+    ctxPixel.clearRect(0, 0, 1, 1);
+    ctxPixel.drawImage(img, px, py, 1, 1, 0, 0, 1, 1);
+    const [r, g, b, a] = ctxPixel.getImageData(0, 0, 1, 1).data;
+    if (a < 40) return 0;
+    let meilleur = 0, ecart = Infinity;
+    c.table.forEach((t, i) => { if (!t[3]) return; const e = (t[0] - r) ** 2 + (t[1] - g) ** 2 + (t[2] - b) ** 2; if (e < ecart) { ecart = e; meilleur = i; } });
+    return meilleur * c.pas;
+  } catch (e) { return null; }
+}
+const wfsIci = (couche, champs, ll) => {
+  const d = 0.00005;
+  return fetch(`https://data.geopf.fr/wfs/ows?service=WFS&version=2.0.0&request=GetFeature&outputFormat=application/json&count=5&typeNames=${couche}` +
+    `&propertyName=${champs}&bbox=${ll.lng - d},${ll.lat - d},${ll.lng + d},${ll.lat + d},EPSG:4326`)
+    .then((r) => (r.ok ? r.json() : { features: [] })).then((j) => j.features.map((f) => f.properties)).catch(() => null);
+};
+const PROTECTIONS = /Réserve naturelle|Réserve biologique|Arrêté de protection|conservatoires d'espaces naturels/;
+let iciJeton = 0;
+async function ouvrirIci(ll) {
+  if (!info) return;
+  const jeton = ++iciJeton, nom = info.especes[espece].nom, p = prevEspece(espece);
+  const k = mode === "jour" && p ? jourSel : 0;
+  const quand = mode === "potentiel" ? null : (k === 0 ? "aujourd'hui" : "le " + dateFr(info.previsions.dates[k]));
+  const texteScore = (v) => v == null ? "inconnu" : v === 0 ? `moins de ${info.couleurs ? info.couleurs.seuil : 80}/1000` : `environ <b>${v}</b>/1000`;
+  const etat = { jour: undefined, pot: undefined, foret: undefined, pub: undefined, prot: undefined, alt: undefined };
+  const lien = `https://www.google.com/maps/dir/?api=1&destination=${ll.lat.toFixed(5)},${ll.lng.toFixed(5)}`;
+  const popup = L.popup({ maxWidth: 300 }).setLatLng(ll);
+  const rendre = () => {
+    if (jeton !== iciJeton) return;
+    let h = `<div class="ici"><b>${sur(nom === "Cèpes" ? "Tous les cèpes" : nom)}</b><br>`;
+    if (quand) h += `Chances ${quand} : ${etat.jour === undefined ? "…" : texteScore(etat.jour)}<br>`;
+    h += `Potentiel du lieu : ${etat.pot === undefined ? "…" : texteScore(etat.pot)}<br>`;
+    if (etat.foret === undefined) h += `<span class="gris">Forêt : …</span><br>`;
+    else if (etat.foret && etat.foret.length) h += `Peuplement : ${sur([...new Set(etat.foret.map((f) => f.tfv || f.essence))].join(" ; ").toLowerCase())}<br>`;
+    else if (etat.foret) h += `<span class="gris">Hors forêt d'après la carte forestière</span><br>`;
+    if (etat.pub && etat.pub.length) h += `🌲 ${sur(etat.pub.map((f) => f.toponyme || f.nature).join(" ; "))} (publique)<br>`;
+    else if (etat.pub && etat.foret && etat.foret.length) h += `<span class="gris">Forêt privée ou statut non renseigné</span><br>`;
+    const prot = (etat.prot || []).filter((f) => PROTECTIONS.test(f.nature || ""));
+    if (prot.length) h += `<span style="color:#b3261e">⚠️ ${sur(prot.map((f) => f.nature + (f.toponyme ? " " + f.toponyme : "")).join(" ; "))} : cueillette interdite ou réglementée</span><br>`;
+    if (etat.alt != null) h += `Altitude : ${Math.round(etat.alt)} m<br>`;
+    h += `<div class="boutons"><a href="${lien}" target="_blank" rel="noopener">Itinéraire</a>` +
+      `<button data-a="trouve">✅ J'en ai trouvé ici</button><button data-a="rien">❌ Rien trouvé ici</button></div></div>`;
+    popup.setContent(h);
+    const el = popup.getElement();
+    if (el) el.querySelectorAll("button[data-a]").forEach((b) => b.onclick = () => { noter(ll, b.dataset.a === "trouve"); carte.closePopup(popup); });
+  };
+  rendre();
+  popup.openOn(carte);
+  rendre();
+  scoreAu(ll, `${espece}_potentiel`).then((v) => { etat.pot = v; rendre(); });
+  if (quand) scoreAu(ll, p ? `${espece}_j${k}` : `${espece}_jour`).then((v) => { etat.jour = v; rendre(); });
+  wfsIci("LANDCOVER.FORESTINVENTORY.V2:formation_vegetale", "essence,tfv", ll).then((v) => { etat.foret = v; rendre(); });
+  wfsIci("BDTOPO_V3:foret_publique", "nature,toponyme", ll).then((v) => { etat.pub = v; rendre(); });
+  wfsIci("BDTOPO_V3:parc_ou_reserve", "nature,toponyme", ll).then((v) => { etat.prot = v; rendre(); });
+  fetch(`https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json?lon=${ll.lng.toFixed(5)}&lat=${ll.lat.toFixed(5)}&resource=ign_rge_alti_wld&zonly=true`)
+    .then((r) => r.json()).then((j) => { const z = j.elevations && j.elevations[0]; etat.alt = z > -1000 ? z : null; rendre(); }).catch(() => {});
+}
+carte.on("click", (ev) => ouvrirIci(ev.latlng));
+
+// ---- Carnet personnel : gardé uniquement dans ce navigateur, jamais envoyé ----
+let carnet = [];
+try { carnet = JSON.parse(localStorage.getItem("toads-carnet") || "[]"); } catch (e) {}
+const groupeCarnet = L.layerGroup().addTo(carte);
+function noter(ll, trouve) {
+  carnet.push({ espece, lat: +ll.lat.toFixed(5), lon: +ll.lng.toFixed(5), date: new Date().toLocaleDateString("sv-SE"), ...(trouve ? {} : { absent: true }) });
+  try { localStorage.setItem("toads-carnet", JSON.stringify(carnet)); } catch (e) {}
+  afficherCarnet();
+}
+function afficherCarnet() {
+  groupeCarnet.clearLayers();
+  carnet.forEach((n, i) => {
+    const nom = info && info.especes[n.espece] ? info.especes[n.espece].nom : n.espece;
+    L.circleMarker([n.lat, n.lon], { bubblingMouseEvents: false, radius: 6, color: "#fff", weight: 2, fillColor: n.absent ? "#8a8f94" : "#2f7d4a", fillOpacity: 1 })
+      .bindPopup(`<div class="ici"><b>${sur(nom)}</b> : ${n.absent ? "rien trouvé" : "trouvé"} le ${new Date(n.date + "T12:00:00").toLocaleDateString("fr-FR")}` +
+        `<div class="boutons"><button data-i="${i}">Effacer cette note</button></div></div>`)
+      .on("popupopen", (ev) => { const b = ev.popup.getElement().querySelector("button[data-i]"); if (b) b.onclick = () => { carnet.splice(i, 1); try { localStorage.setItem("toads-carnet", JSON.stringify(carnet)); } catch (e) {} afficherCarnet(); }; })
+      .addTo(groupeCarnet);
+  });
+  const zone = document.getElementById("carnet");
+  if (!carnet.length) { zone.innerHTML = `<label class="titre">Mon carnet</label><p class="aide">Touchez la carte à l'endroit d'une cueillette, puis « J'en ai trouvé ici » ou « Rien trouvé ici ». Vos notes restent dans ce téléphone.</p>`; return; }
+  const nb = carnet.filter((n) => !n.absent).length;
+  zone.innerHTML = `<label class="titre">Mon carnet</label>${nb} trouvaille${nb > 1 ? "s" : ""}, ${carnet.length - nb} sortie${carnet.length - nb > 1 ? "s" : ""} sans rien. ` +
+    `Ces notes restent dans ce téléphone.<div class="ligne-carnet"><button id="copier-carnet">Copier mes notes</button></div>` +
+    `<p class="aide" id="aide-carnet">Collez-les dans la conversation avec Claude pour que la carte en tienne compte.</p>`;
+  document.getElementById("copier-carnet").onclick = async () => {
+    const texte = JSON.stringify(carnet);
+    try { await navigator.clipboard.writeText(texte); document.getElementById("aide-carnet").textContent = "Notes copiées : collez-les dans la conversation avec Claude."; }
+    catch (e) { document.getElementById("aide-carnet").textContent = texte; }
+  };
+}
 
 document.getElementById("localiser").onclick = () => {
   document.getElementById("resultats").innerHTML = `<p class="aide">Recherche de votre position…</p>`;
