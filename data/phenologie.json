@@ -1,31 +1,58 @@
 {
- "date": "2026-11-09",
+ "date": "2026-11-11",
  "especes": {
-  "cepe": {
-   "presences": 726,
-   "temoins": 2884,
-   "auc_defaut": 0.603,
-   "auc_appris": 0.623,
-   "retenu": true,
+  "cepe_bordeaux": {
+   "presences": 532,
+   "temoins": 2861,
+   "auc_defaut": 0.582,
+   "auc_appris": 0.583,
+   "retenu": false,
    "delai": [
     9,
-    18
+    22
+   ],
+   "tsol": [
+    9,
+    15
+   ],
+   "trouvailles": 1,
+   "reglages_refuses_par_trouvailles": 226
+  },
+  "cepe_ete": {
+   "presences": 191,
+   "temoins": 3182,
+   "auc_defaut": 0.748,
+   "auc_appris": 0.73,
+   "retenu": false,
+   "delai": [
+    7,
+    22
    ],
    "tsol": [
     13,
-    19
+    21
    ],
    "trouvailles": 0,
    "reglages_refuses_par_trouvailles": 0
   },
+  "cepe_bronze": {
+   "presences": 26,
+   "auc_defaut": 0.73,
+   "retenu": false
+  },
+  "cepe_pins": {
+   "presences": 29,
+   "auc_defaut": 0.548,
+   "retenu": false
+  },
   "girolle": {
    "presences": 536,
-   "temoins": 3034,
-   "auc_defaut": 0.564,
-   "auc_appris": 0.628,
+   "temoins": 2929,
+   "auc_defaut": 0.531,
+   "auc_appris": 0.601,
    "retenu": true,
    "delai": [
-    2,
+    5,
     30
    ],
    "tsol": [
@@ -37,47 +64,13 @@
   },
   "trompette": {
    "presences": 101,
-   "temoins": 3209,
-   "auc_defaut": 0.535,
-   "auc_appris": 0.52,
+   "temoins": 3237,
+   "auc_defaut": 0.576,
+   "auc_appris": 0.581,
    "retenu": false,
    "delai": [
-    5,
-    30
-   ],
-   "tsol": [
-    3,
-    17
-   ],
-   "trouvailles": 0,
-   "reglages_refuses_par_trouvailles": 0
-  },
-  "chanterelle_tube": {
-   "presences": 94,
-   "temoins": 3170,
-   "auc_defaut": 0.599,
-   "auc_appris": 0.595,
-   "retenu": false,
-   "delai": [
-    5,
-    30
-   ],
-   "tsol": [
-    3,
-    13
-   ],
-   "trouvailles": 0,
-   "reglages_refuses_par_trouvailles": 0
-  },
-  "coulemelle": {
-   "presences": 626,
-   "temoins": 2883,
-   "auc_defaut": 0.6,
-   "auc_appris": 0.598,
-   "retenu": false,
-   "delai": [
-    9,
-    18
+    7,
+    26
    ],
    "tsol": [
     9,
@@ -86,18 +79,52 @@
    "trouvailles": 0,
    "reglages_refuses_par_trouvailles": 0
   },
+  "chanterelle_tube": {
+   "presences": 94,
+   "temoins": 3211,
+   "auc_defaut": 0.695,
+   "auc_appris": 0.629,
+   "retenu": false,
+   "delai": [
+    3,
+    10
+   ],
+   "tsol": [
+    3,
+    11
+   ],
+   "trouvailles": 0,
+   "reglages_refuses_par_trouvailles": 0
+  },
+  "coulemelle": {
+   "presences": 626,
+   "temoins": 2820,
+   "auc_defaut": 0.557,
+   "auc_appris": 0.556,
+   "retenu": false,
+   "delai": [
+    3,
+    22
+   ],
+   "tsol": [
+    9,
+    19
+   ],
+   "trouvailles": 0,
+   "reglages_refuses_par_trouvailles": 0
+  },
   "rose_des_pres": {
    "presences": 108,
-   "temoins": 3221,
-   "auc_defaut": 0.514,
-   "auc_appris": 0.561,
+   "temoins": 3252,
+   "auc_defaut": 0.53,
+   "auc_appris": 0.569,
    "retenu": true,
    "delai": [
     2,
     10
    ],
    "tsol": [
-    11,
+    13,
     21
    ],
    "trouvailles": 0,
@@ -105,13 +132,13 @@
   },
   "coprin": {
    "presences": 798,
-   "temoins": 2914,
-   "auc_defaut": 0.544,
-   "auc_appris": 0.612,
+   "temoins": 2894,
+   "auc_defaut": 0.577,
+   "auc_appris": 0.674,
    "retenu": true,
    "delai": [
     2,
-    22
+    26
    ],
    "tsol": [
     7,
@@ -122,26 +149,26 @@
   },
   "pied_de_mouton": {
    "presences": 208,
-   "temoins": 3034,
-   "auc_defaut": 0.433,
-   "auc_appris": 0.431,
+   "temoins": 3047,
+   "auc_defaut": 0.423,
+   "auc_appris": 0.438,
    "retenu": false,
    "delai": [
-    3,
+    2,
     10
    ],
    "tsol": [
-    13,
-    17
+    3,
+    13
    ],
    "trouvailles": 0,
    "reglages_refuses_par_trouvailles": 0
   },
   "morille": {
    "presences": 81,
-   "temoins": 3291,
-   "auc_defaut": 0.539,
-   "auc_appris": 0.762,
+   "temoins": 3342,
+   "auc_defaut": 0.688,
+   "auc_appris": 0.846,
    "retenu": true,
    "delai": [
     9,
