@@ -172,8 +172,9 @@ def trouvailles_personnelles():
     if not brut:
         return pd.DataFrame(columns=["espece", "lat", "lon"])
     t = pd.DataFrame(json.loads(brut))
-    if "absent" in t:
-        t = t[~t["absent"].fillna(False).astype(bool)]
+    for drapeau in ("absent", "approx"):        # sorties bredouilles et lieux approximatifs : pas pour la carte à 100 m
+        if drapeau in t:
+            t = t[~t[drapeau].fillna(False).astype(bool)]
     return t
 
 
