@@ -59,6 +59,13 @@
   .bandeau { position: fixed; z-index: 1200; left: 50%; transform: translateX(-50%); bottom: 84px; background: #1f3a2b; color: #fff; border-radius: 999px; padding: 9px 14px; font-size: 13.5px; box-shadow: 0 3px 12px rgba(0,0,0,.3); display: flex; gap: 10px; align-items: center; max-width: 92vw; }
   .bandeau button { background: none; border: 1px solid rgba(255,255,255,.5); color: #fff; border-radius: 999px; padding: 3px 9px; font-size: 12.5px; cursor: pointer; }
   .fiabilite { font-size: 12.5px; color: var(--gris); margin: 0 0 8px; }
+  .sosies { margin: 12px 0; font-size: 13px; }
+  .sosies .carte-sosie { display: flex; gap: 10px; padding: 8px 0; border-top: 1px solid var(--ligne); line-height: 1.4; }
+  .sosies .carte-sosie a { flex: 0 0 118px; }
+  .sosies img { width: 118px; height: 96px; object-fit: cover; border-radius: 8px; display: block; background: #e9e6dc; }
+  .sosies .etiquette { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 999px; padding: 1px 8px; color: #fff; margin: 2px 0; }
+  .sosies .bon { background: #2f7d4a; } .sosies .mortel { background: #7a1410; } .sosies .toxique { background: #b3261e; } .sosies .neutre { background: #7a7f85; }
+  .sosies .credit { font-size: 10.5px; color: var(--gris); display: block; margin-top: 2px; }
   .cle { margin: 12px 0; font-size: 13.5px; }
   .cle summary { cursor: pointer; font-weight: 650; padding: 9px 12px; border: 1px solid var(--ligne); border-radius: 10px; background: #fff; }
   .cle .question { padding: 10px 0; border-bottom: 1px solid var(--ligne); line-height: 1.4; }
@@ -202,6 +209,7 @@
     <div class="carnet" id="carnet"></div>
 
     <div class="fiche" id="fiche"></div>
+    <div class="sosies" id="sosies"></div>
     <div class="cle" id="cle"></div>
 
     <div class="pied">
@@ -459,6 +467,70 @@ const CLES = {
     ["Vous allez la cuire longuement (au moins 15 minutes) ?", "La morille est toxique crue ou peu cuite."],
   ],
 };
+// ---- Sosies : le champignon recherché et ceux avec lesquels on le confond (photos Wikimedia Commons) ----
+// [nom, étiquette, type, différence, fichier Commons, auteur, licence]
+const S_CEPES = [
+  ["Cèpe de Bordeaux", "Comestible", "bon", "Sous le chapeau, des pores blancs puis jaune-verdâtre. Pied à fin réseau clair. Chair blanche qui ne change pas à la coupe.", "Boletus_edulis_IT.jpg", "ReddishClover", "CC BY-SA 4.0"],
+  ["Bolet amer (bolet de fiel)", "Immangeable", "neutre", "Les pores rosissent avec l'âge, le pied porte un gros réseau brun en relief, la chair est très amère : un seul suffit à gâcher le plat.", "2006-09-14_Tylopilus_felleus_crop.jpg", "Bernd Gliwa", "CC BY-SA 2.5"],
+  ["Bolet Satan", "Toxique", "toxique", "Chapeau blanchâtre, pores rouges, pied renflé rouge. La chair bleuit à la coupe.", "Boletus_satanas.JPG", "Archenzo", "CC BY-SA 3.0"],
+];
+const SOSIES = {
+  cepe: S_CEPES, cepe_bordeaux: S_CEPES, cepe_ete: S_CEPES, cepe_bronze: S_CEPES, cepe_pins: S_CEPES,
+  girolle: [
+    ["Girolle", "Comestible", "bon", "Des plis épais et fourchus qui descendent sur le pied, pas de vraies lames. Chair ferme et pâle, odeur d'abricot.", "Chanterelle_Cantharellus_cibarius.jpg", "", "CC BY-SA 3.0"],
+    ["Fausse girolle", "Indigeste", "neutre", "De vraies lames fines, serrées et fourchues, orange vif. Chapeau mince, chair molle et orangée, sans odeur fruitée.", "Hygrophoropsis_aurantiaca_241718.jpg", "Walt Sturgeon", "CC BY-SA 3.0"],
+    ["Clitocybe de l'olivier", "Toxique", "toxique", "En touffes serrées sur une souche ou une racine. De vraies lames, chair orangée et fibreuse.", "Omphalotus_olearius.JPG", "Antonio Abbatiello", "domaine public"],
+  ],
+  trompette: [
+    ["Trompette de la mort", "Comestible", "bon", "Entonnoir creux jusqu'en bas, noir dedans, gris cendré et presque lisse dehors.", "Craterellus_cornucopioides_JPG1.jpg", "Jean-Pol Grandmont", "CC BY 3.0"],
+    ["Chanterelle cendrée", "Comestible", "bon", "Son seul vrai sosie, sans danger : des plis gris bien nets sous le chapeau. La trompette n'a pas de sosie toxique.", "CantharellusCinereus.JPG", "Archenzo", "CC BY 3.0"],
+  ],
+  chanterelle_tube: [
+    ["Chanterelle en tube", "Comestible", "bon", "Des plis espacés gris-jaunâtre sous un chapeau brun creusé au centre. Pied jaune, creux, souvent aplati.", "Craterellus_tubaeformis_1345904803_69350246bb_o.jpg", "Miika Silfverberg", "CC BY-SA 2.0"],
+    ["Cortinaire très joli", "Mortel", "mortel", "Pousse dans la même mousse sous les épicéas. De vraies lames rousses, chapeau roux à bosse pointue, pied plein chiné de jaune.", "Cortinarius_rubellus_01.jpg", "Eric Steinert", "CC BY-SA 3.0"],
+    ["Galère marginée", "Mortelle", "mortel", "Petit champignon brun miel à vraies lames, avec un petit anneau sur le pied. Sur le bois mort moussu.", "Galerina_marginata_Point_Reyes.jpg", "Alan Rockefeller", "CC BY-SA 4.0"],
+  ],
+  coulemelle: [
+    ["Coulemelle", "Comestible", "bon", "Grande : chapeau de 15 à 30 cm. Pied haut, zébré de brun, avec un anneau double qui coulisse.", "Parasol-Macrolepiota-procera.jpg", "Holger Krisp", "CC BY 3.0"],
+    ["Petites lépiotes (lépiote brun-incarnat)", "Mortelles", "mortel", "Petites : chapeau de 3 à 7 cm, écailles brun-rosé, pas d'anneau qui coulisse. Ne cueillez jamais de petite « coulemelle ».", "Lepiota_brunneoincarnata_060823w.jpg", "Strobilomyces", "CC BY-SA 3.0"],
+    ["Lépiote déguenillée", "Parfois indigeste", "neutre", "Pied lisse, sans zébrures. La chair rougit nettement à la coupe.", "Chlorophyllum_rhacodes_LC0093.jpg", "Jörg Hempel", "CC BY-SA 2.0 de"],
+  ],
+  rose_des_pres: [
+    ["Rosé des prés", "Comestible", "bon", "Lames roses puis brun chocolat, jamais blanches. Pied sans sac à la base, dans l'herbe d'un pré.", "Agaricus_campestris.jpg", "", "CC BY-SA 3.0"],
+    ["Amanites blanches (amanite vireuse)", "Mortelles", "mortel", "Lames toujours blanches, et un sac (volve) à la base du pied, souvent caché sous terre.", "Destroying_Angel_02.jpg", "Ben DeRoy", "domaine public"],
+    ["Agaric jaunissant", "Toxique", "toxique", "La base du pied jaunit vivement dès qu'on la frotte ou la coupe. Odeur d'encre ou de désinfectant.", "Agaricus_xanthodermus_section.jpg", "Velella", "CC BY-SA 3.0"],
+  ],
+  coprin: [
+    ["Coprin chevelu", "Comestible jeune", "bon", "Chapeau en cloche allongée, blanc, couvert de mèches retroussées. À cueillir tant qu'il est tout blanc.", "Coprinus_comatus,_the_shaggy_ink_cap,_lawyer's_wig,_or_shaggy_mane_mushroom.jpg", "Bigredwine1", "CC BY-SA 4.0"],
+    ["Coprin noir d'encre", "Toxique avec l'alcool", "toxique", "Chapeau gris, lisse ou à peine écailleux au sommet, sans mèches. Pousse en touffes.", "Coprinopsis_atramentaria_3_-_Lindsey.jpg", "James Lindsey", "CC BY-SA 3.0"],
+  ],
+  pied_de_mouton: [
+    ["Pied de mouton", "Comestible", "bon", "Chapeau crème à orangé pâle, et de petits aiguillons clairs à la place des lames.", "Hedgehog_fungi2.jpg", "D J Kelly", "domaine public"],
+    ["Hydne imbriqué", "Amer", "neutre", "Chapeau brun à grosses écailles sombres, aiguillons gris. Sans danger, mais amer. Le pied de mouton n'a pas de sosie toxique.", "Habichtspilz-Sarcodon-imbricatus.jpg", "Holger Krisp", "CC BY 3.0"],
+  ],
+  russule: [
+    ["Russule charbonnière", "Comestible", "bon", "Chapeau violet, gris ardoise ou vert. Lames blanches et souples, pied blanc sans anneau ni sac, qui casse comme de la craie.", "Russula_cyanoxantha.JPG", "", "CC BY-SA 3.0"],
+    ["Amanite phalloïde", "Mortelle", "mortel", "Chapeau vert olive à jaunâtre. Un anneau sur le pied et un sac (volve) à sa base, souvent enterré : déterrez toujours le pied.", "Amanita_phalloides_1.JPG", "Archenzo", "CC BY-SA 3.0"],
+    ["Russule fragile", "Indigeste", "neutre", "Plus petite, lames qui s'émiettent sous le doigt, goût très piquant.", "Russula_fragilis.jpg", "Zonda Grattus", "CC BY 3.0"],
+  ],
+  morille: [
+    ["Morille", "Comestible bien cuite", "bon", "Chapeau en nid d'abeille. Coupée en long, elle est creuse d'un seul tenant, du chapeau au pied.", "Morchella_esculenta_-_DE_-_TH_-_2013-05-01_-_01.JPG", "TOMMES-WIKI", "CC BY-SA 3.0"],
+    ["Gyromitre (fausse morille)", "Mortel", "mortel", "Chapeau plissé comme une cervelle, brun-rouge. Intérieur cloisonné, pas une seule cavité.", "Frühjahrslorchel.JPG", "", "CC BY-SA 3.0"],
+    ["Verpe de Bohême", "À éviter", "neutre", "Chapeau en dé à coudre, attaché seulement au sommet du pied. Pied rempli de moelle cotonneuse.", "Verpa_bohemica1.jpg", "Jason Hollinger", "CC BY-SA 3.0"],
+  ],
+};
+function afficherSosies() {
+  const zone = document.getElementById("sosies"), l = SOSIES[espece];
+  if (!l) { zone.innerHTML = ""; return; }
+  zone.innerHTML = `<label class="titre">Ne pas confondre</label>` + l.map(([nom, etiq, type, diff, fichier, auteur, licence]) => {
+    const f = encodeURIComponent(fichier);
+    return `<div class="carte-sosie"><a href="https://commons.wikimedia.org/wiki/File:${f}" target="_blank" rel="noopener">` +
+      `<img loading="lazy" alt="${sur(nom)}" src="https://commons.wikimedia.org/wiki/Special:FilePath/${f}?width=360"></a>` +
+      `<div><b>${sur(nom)}</b><br><span class="etiquette ${type}">${sur(etiq)}</span><br>${sur(diff)}` +
+      `<span class="credit">Photo : ${sur(auteur || "Wikimedia Commons")}, ${sur(licence)}</span></div></div>`;
+  }).join("") + `<p class="aide">Une photo montre un exemplaire parmi d'autres : couleurs et formes varient beaucoup. Touchez une photo pour la voir en grand.</p>`;
+}
+
 function afficherCle() {
   const zone = document.getElementById("cle"), q = CLES[espece];
   if (!q) { zone.innerHTML = ""; return; }
@@ -545,7 +617,7 @@ function afficher() {
     (f.signes ? `<dt>Le reconnaître</dt><dd>${f.signes}</dd>` : "") + `</dl>
      <p style="margin:0 0 8px">${f.conseil}</p>` + fiab + (f.attention ? `<div class="attention">⚠️ ${f.attention}</div>` : "");
   afficherCarnet();
-  afficherCle();
+  afficherCle(); afficherSosies();
 }
 
 document.getElementById("mode-jour").onclick = () => { mode = "jour"; enregistrer(); afficher(); };
