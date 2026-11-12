@@ -251,6 +251,15 @@ def image(grille, merc, table, chemin):
     img.save(chemin, transparency=bytes(c[3] for c in table))
 
 
+def voile(prive, merc, chemin):
+    """Voile clair sur les carrés hors forêt publique (affiché quand on ne veut que les forêts publiques)."""
+    v = np.zeros(merc["indices"].shape, dtype="uint8")
+    v[merc["dedans"]] = prive.ravel()[merc["indices"][merc["dedans"]]]
+    img = Image.fromarray(v, "P")
+    img.putpalette([0, 0, 0, 247, 246, 241])
+    img.save(chemin, transparency=bytes([0, 215]))
+
+
 def secteurs(grille, seuil, statut=None, rayon=6):
     """Meilleurs secteurs d'une carte : moyenne sur 300 m, puis un seul point par voisinage de ~1,2 km.
 
@@ -385,6 +394,8 @@ def main():
         vieux.unlink()
     merc = preparer_mercator()
     table = table_couleurs()
+    if publique is not None:
+        voile(masque & (publique == 0), merc, sortie / "prive.png")
     infos, previsions = {}, {}
     groupe_de = {e: g for g in GROUPES for e in membres(g)}
     # Cartes des groupes (« tous les cèpes ») : meilleur score pondéré de leurs membres, carré par carré
@@ -494,6 +505,7 @@ def main():
         "groupes": groupes,
         "fiabilite": fiabilite(),
         "acces": publique is not None,
+        "voile": publique is not None,
     })
     print("Cartes du jour et prévisions prêtes.")
 

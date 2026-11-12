@@ -46,8 +46,18 @@
   .ici .gris { color: var(--gris); }
   .ici .boutons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
   .ici button, .carnet button { border: 1px solid var(--ligne); background: #fff; border-radius: 8px; padding: 5px 9px; font-size: 12.5px; cursor: pointer; color: var(--encre); }
+  [hidden] { display: none !important; }
   .carnet { margin: 14px 0; font-size: 13.5px; }
   .carnet .ligne-carnet { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .carnet .principal { background: var(--mousse); color: #fff; border-color: var(--mousse); font-size: 13.5px; padding: 7px 11px; }
+  .carnet select, .carnet input[type=text] { width: 100%; box-sizing: border-box; margin-top: 6px; padding: 7px 8px; border: 1px solid var(--ligne); border-radius: 8px; font-size: 14px; background: #fff; color: var(--encre); }
+  .carnet .choix { display: flex; gap: 14px; margin-top: 8px; }
+  .carnet ul { list-style: none; margin: 8px 0 0; padding: 0; }
+  .carnet li { display: flex; align-items: center; gap: 6px; padding: 3px 0; border-top: 1px solid var(--ligne); }
+  .carnet li .lieu { flex: 1; text-align: left; border: 0; padding: 4px 0; background: none; font-size: 13px; }
+  .carnet li .oter { border: 0; color: var(--gris); font-size: 15px; padding: 2px 7px; }
+  .bandeau { position: fixed; z-index: 1200; left: 50%; transform: translateX(-50%); bottom: 84px; background: #1f3a2b; color: #fff; border-radius: 999px; padding: 9px 14px; font-size: 13.5px; box-shadow: 0 3px 12px rgba(0,0,0,.3); display: flex; gap: 10px; align-items: center; max-width: 92vw; }
+  .bandeau button { background: none; border: 1px solid rgba(255,255,255,.5); color: #fff; border-radius: 999px; padding: 3px 9px; font-size: 12.5px; cursor: pointer; }
   .fiabilite { font-size: 12.5px; color: var(--gris); margin: 0 0 8px; }
   .cle { margin: 12px 0; font-size: 13.5px; }
   .cle summary { cursor: pointer; font-weight: 650; padding: 9px 12px; border: 1px solid var(--ligne); border-radius: 10px; background: #fff; }
@@ -181,7 +191,8 @@
         <input type="range" id="rayon" min="1" max="100" step="1" value="15" aria-label="Rayon de recherche en kilomètres">
         <span id="rayon-txt">15 km</span>
       </div>
-      <label class="option" id="option-publiques" hidden><input type="checkbox" id="publiques"> Forêts publiques seulement</label>
+      <label class="option" id="option-publiques" hidden><input type="checkbox" id="publiques"> Forêts publiques seulement (les autres terrains sont voilés)</label>
+      <p class="aide" id="note-pres" hidden>Champignon des prés et des bords de chemins : ces terrains sont presque toujours privés, demandez l'accord du propriétaire avant d'entrer dans un pré.</p>
       <div class="resultats" id="resultats">
         <p class="aide">Touchez « Me localiser » pour voir les meilleurs coins autour de vous. Vous pourrez ensuite déplacer le point bleu,
         ou faire un clic droit (appui long sur téléphone) pour chercher autour d'un autre endroit.</p>
@@ -208,6 +219,7 @@
 </section>
 
 <button class="localiser" id="localiser">📍 Me localiser</button>
+<div class="bandeau" id="bandeau" hidden><span>Touchez la carte à l'endroit exact</span><button id="bandeau-annuler">Annuler</button></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
@@ -466,7 +478,8 @@ function afficher() {
   const e = info.especes[espece], f = FICHES[espece] || FICHES.cepe, m = info.meteo, p = prevEspece(espece);
   if (!p) jourSel = 0;
   boutonsEspeces();
-  document.getElementById("option-publiques").hidden = !info.acces;
+  document.getElementById("option-publiques").hidden = !info.acces || HORS_FORET.includes(espece);
+  document.getElementById("note-pres").hidden = !HORS_FORET.includes(espece);
   afficherAvenir();
   afficherJours();
   document.getElementById("mode-jour").setAttribute("aria-pressed", mode === "jour");
@@ -475,6 +488,7 @@ function afficher() {
   if (couche) carte.removeLayer(couche);
   const fichier = mode === "potentiel" ? `${espece}_potentiel` : (p ? `${espece}_j${jourSel}` : `${espece}_jour`);
   couche = L.imageOverlay(`cartes/${fichier}.png?d=${info.date}`, info.bornes, { opacity: 0.85, interactive: false }).addTo(carte);
+  afficherVoile();
 
   const etat = document.getElementById("etat");
   if (mode === "jour" && jourSel > 0 && p) {
@@ -592,7 +606,7 @@ async function chercherAutour(ajuster) {
   for (const [lat, lng, s, st] of tous) {
     const d = distanceKm(centre, { lat, lng });
     if (d < plusProche) plusProche = d;
-    if (d <= rayon && (!publiquesSeules || st > 0)) proches.push({ lat, lng, s, d, st: st || 0 });
+    if (d <= rayon && (!filtrePublic() || st > 0)) proches.push({ lat, lng, s, d, st: st || 0 });
   }
   proches.sort((a, b) => b.s - a.s || a.d - b.d);
   const meilleurs = proches.slice(0, NB_COINS);
@@ -612,7 +626,7 @@ async function chercherAutour(ajuster) {
   if (!meilleurs.length) {
     let msg;
     if (plusProche > 100) msg = "Vous êtes hors de la zone couverte (Alsace, Lorraine, Vosges). Déplacez le point bleu dans la zone.";
-    else if (publiquesSeules && tous.length) msg = `Aucun coin favorable en forêt publique pour : ${nom}, dans ce rayon. Agrandissez le rayon ou décochez « Forêts publiques seulement ».`;
+    else if (filtrePublic() && tous.length) msg = `Aucun coin favorable en forêt publique pour : ${nom}, dans ce rayon. Agrandissez le rayon ou décochez « Forêts publiques seulement ».`;
     else if (mode === "jour") msg = `Aucun coin favorable ${jourSel === 0 ? "aujourd'hui" : "ce jour-là"} pour : ${nom}, dans ce rayon. Agrandissez le rayon, choisissez un autre jour ou passez en mode « Potentiel ».`;
     else msg = `Aucun coin favorable pour : ${nom}, dans ce rayon. Agrandissez le rayon.`;
     zone.innerHTML = `<p class="aide">${msg}</p>`;
@@ -630,13 +644,23 @@ async function chercherAutour(ajuster) {
 }
 
 const STATUTS_FORET = ["Forêt privée ou statut non renseigné", "Forêt domaniale (publique)", "Forêt communale ou autre forêt publique"];
-let publiquesSeules = false;
-try { publiquesSeules = localStorage.getItem("toads-publiques") === "1"; } catch (e) {}
+// Par défaut, seules les forêts publiques sont proposées : ailleurs, on ne peut en général ni entrer ni cueillir
+let publiquesSeules = true, voilePrive = null;
+try { publiquesSeules = localStorage.getItem("toads-publiques") !== "0"; } catch (e) {}
+// Champignons des prés et des bords de chemins : le filtre « forêts publiques » n'a pas de sens pour eux
+const HORS_FORET = ["coulemelle", "rose_des_pres", "coprin"];
+const filtrePublic = () => publiquesSeules && !!info && !!info.acces && !HORS_FORET.includes(espece);
+function afficherVoile() {
+  if (voilePrive) { carte.removeLayer(voilePrive); voilePrive = null; }
+  if (!info || !info.voile || !filtrePublic()) return;
+  voilePrive = L.imageOverlay(`cartes/prive.png?d=${info.date}`, info.bornes, { interactive: false, zIndex: 2 }).addTo(carte);
+}
 const casePubliques = document.getElementById("publiques");
 casePubliques.checked = publiquesSeules;
 casePubliques.onchange = () => {
   publiquesSeules = casePubliques.checked;
   try { localStorage.setItem("toads-publiques", publiquesSeules ? "1" : "0"); } catch (e) {}
+  afficherVoile();
   chercherAutour(false);
 };
 
@@ -791,10 +815,14 @@ async function ouvrirIci(ll) {
     if (prot.length) h += `<span style="color:#b3261e">⚠️ ${sur(prot.map((f) => f.nature + (f.toponyme ? " " + f.toponyme : "")).join(" ; "))} : cueillette interdite ou réglementée</span><br>`;
     if (etat.alt != null) h += `Altitude : ${Math.round(etat.alt)} m<br>`;
     h += `<div class="boutons"><a href="${lien}" target="_blank" rel="noopener">Itinéraire</a>` +
-      `<button data-a="trouve">✅ J'en ai trouvé ici</button><button data-a="rien">❌ Rien trouvé ici</button></div></div>`;
+      `<button data-a="trouve">✅ J'en ai trouvé ici</button><button data-a="rien">❌ Rien trouvé ici</button>` +
+      `<button data-a="autre">📝 Autre champignon ici</button></div></div>`;
     popup.setContent(h);
     const el = popup.getElement();
-    if (el) el.querySelectorAll("button[data-a]").forEach((b) => b.onclick = () => { noter(ll, b.dataset.a === "trouve"); carte.closePopup(popup); });
+    if (el) el.querySelectorAll("button[data-a]").forEach((b) => b.onclick = () => {
+      carte.closePopup(popup);
+      if (b.dataset.a === "autre") ouvrirFormulaire(ll); else noter(ll, b.dataset.a === "trouve");
+    });
   };
   rendre();
   popup.openOn(carte);
@@ -807,34 +835,104 @@ async function ouvrirIci(ll) {
   fetch(`https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json?lon=${ll.lng.toFixed(5)}&lat=${ll.lat.toFixed(5)}&resource=ign_rge_alti_wld&zonly=true`)
     .then((r) => r.json()).then((j) => { const z = j.elevations && j.elevations[0]; etat.alt = z > -1000 ? z : null; rendre(); }).catch(() => {});
 }
-carte.on("click", (ev) => ouvrirIci(ev.latlng));
+carte.on("click", (ev) => { if (noteEnAttente) { const n = noteEnAttente; finAttente(); ajouterNote(ev.latlng, n); } else ouvrirIci(ev.latlng); });
 
 // ---- Carnet personnel : gardé uniquement dans ce navigateur, jamais envoyé ----
 let carnet = [];
 try { carnet = JSON.parse(localStorage.getItem("toads-carnet") || "[]"); } catch (e) {}
 const groupeCarnet = L.layerGroup().addTo(carte);
-function noter(ll, trouve) {
-  carnet.push({ espece, lat: +ll.lat.toFixed(5), lon: +ll.lng.toFixed(5), date: new Date().toLocaleDateString("sv-SE"), ...(trouve ? {} : { absent: true }) });
-  try { localStorage.setItem("toads-carnet", JSON.stringify(carnet)); } catch (e) {}
+let noteEnAttente = null, formulaire = null;
+function sauverCarnet() { try { localStorage.setItem("toads-carnet", JSON.stringify(carnet)); } catch (e) {} afficherCarnet(); }
+function ajouterNote(ll, n) {
+  carnet.push({ espece: n.espece, ...(n.nom ? { nom: n.nom } : {}), lat: +ll.lat.toFixed(5), lon: +ll.lng.toFixed(5),
+    date: new Date().toLocaleDateString("sv-SE"), ...(n.absent ? { absent: true } : {}) });
+  formulaire = null;
+  sauverCarnet();
+  carte.setView(ll, Math.max(carte.getZoom(), 14));
+}
+function noter(ll, trouve) { ajouterNote(ll, { espece, absent: !trouve }); }
+function nomNote(n) { return n.nom || (info && info.especes[n.espece] ? info.especes[n.espece].nom : n.espece); }
+function finAttente() { noteEnAttente = null; document.getElementById("bandeau").hidden = true; }
+document.getElementById("bandeau-annuler").onclick = finAttente;
+function deplierPanneau(ouvert) {
+  const plie = document.getElementById("panneau").classList.contains("plie");
+  if (window.innerWidth <= 640 && plie === ouvert) document.getElementById("plier").click();
+}
+// Formulaire d'ajout : n'importe quel champignon, à ma position ou à un endroit touché sur la carte
+function ouvrirFormulaire(ll) {
+  formulaire = { ll: ll || null };
   afficherCarnet();
+  deplierPanneau(true);
+  document.getElementById("carnet").scrollIntoView({ block: "start" });
+}
+function lireFormulaire() {
+  const v = document.getElementById("note-espece").value, nom = document.getElementById("note-nom").value.trim().slice(0, 60);
+  const absent = document.querySelector("input[name=note-res]:checked").value === "rien";
+  if (v === "autre" && !nom) { document.getElementById("aide-note").textContent = "Indiquez le nom du champignon."; return null; }
+  return v === "autre" ? { espece: "autre", nom, absent } : { espece: v, absent };
+}
+function htmlFormulaire() {
+  const noms = info ? Object.entries(info.especes).map(([k, e]) => [k, k === "cepe" ? "Cèpe (sans préciser lequel)" : e.nom]) : [];
+  return `<select id="note-espece" aria-label="Champignon">${noms.map(([k, n]) => `<option value="${k}"${k === espece ? " selected" : ""}>${sur(n)}</option>`).join("")}` +
+    `<option value="autre">Autre champignon…</option></select>` +
+    `<input type="text" id="note-nom" placeholder="Nom du champignon" maxlength="60" hidden>` +
+    `<div class="choix"><label><input type="radio" name="note-res" value="trouve" checked> J'en ai trouvé</label>` +
+    `<label><input type="radio" name="note-res" value="rien"> Rien trouvé</label></div>` +
+    `<div class="ligne-carnet">` + (formulaire.ll ? `<button class="principal" id="note-ici">Enregistrer à cet endroit</button>` :
+      `<button class="principal" id="note-gps">📍 À ma position</button><button id="note-carte">🗺️ Choisir sur la carte</button>`) +
+    `<button id="note-annuler">Annuler</button></div><p class="aide" id="aide-note"></p>`;
+}
+function brancherFormulaire() {
+  const sel = document.getElementById("note-espece"), nom = document.getElementById("note-nom"), aide = document.getElementById("aide-note");
+  sel.onchange = () => { nom.hidden = sel.value !== "autre"; if (!nom.hidden) nom.focus(); };
+  document.getElementById("note-annuler").onclick = () => { formulaire = null; afficherCarnet(); };
+  const ici = document.getElementById("note-ici");
+  if (ici) { ici.onclick = () => { const n = lireFormulaire(); if (n) ajouterNote(formulaire.ll, n); }; return; }
+  document.getElementById("note-carte").onclick = () => {
+    const n = lireFormulaire(); if (!n) return;
+    noteEnAttente = n; formulaire = null; afficherCarnet();
+    document.getElementById("bandeau").hidden = false; carte.closePopup(); deplierPanneau(false);
+  };
+  document.getElementById("note-gps").onclick = () => {
+    const n = lireFormulaire(); if (!n) return;
+    if (!navigator.geolocation) { aide.textContent = "Localisation indisponible : choisissez l'endroit sur la carte."; return; }
+    aide.textContent = "Recherche de votre position…";
+    navigator.geolocation.getCurrentPosition((pos) => {
+      ajouterNote(L.latLng(pos.coords.latitude, pos.coords.longitude), n);
+      const prec = Math.round(pos.coords.accuracy);
+      if (prec > 50) document.getElementById("aide-carnet").textContent = `Note ajoutée, position à ${prec} m près : sous les arbres le GPS est moins précis.`;
+    }, () => { aide.textContent = "Position introuvable : choisissez l'endroit sur la carte."; }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+  };
 }
 function afficherCarnet() {
   groupeCarnet.clearLayers();
   carnet.forEach((n, i) => {
-    const nom = info && info.especes[n.espece] ? info.especes[n.espece].nom : n.espece;
     L.circleMarker([n.lat, n.lon], { bubblingMouseEvents: false, radius: 6, color: "#fff", weight: 2, fillColor: n.absent ? "#8a8f94" : "#2f7d4a", fillOpacity: 1 })
-      .bindPopup(`<div class="ici"><b>${sur(nom)}</b> : ${n.absent ? "rien trouvé" : "trouvé"} le ${new Date(n.date + "T12:00:00").toLocaleDateString("fr-FR")}` +
+      .bindPopup(`<div class="ici"><b>${sur(nomNote(n))}</b> : ${n.absent ? "rien trouvé" : "trouvé"} le ${new Date(n.date + "T12:00:00").toLocaleDateString("fr-FR")}` +
         `<div class="boutons"><button data-i="${i}">Effacer cette note</button></div></div>`)
-      .on("popupopen", (ev) => { const b = ev.popup.getElement().querySelector("button[data-i]"); if (b) b.onclick = () => { carnet.splice(i, 1); try { localStorage.setItem("toads-carnet", JSON.stringify(carnet)); } catch (e) {} afficherCarnet(); }; })
+      .on("popupopen", (ev) => { const b = ev.popup.getElement().querySelector("button[data-i]"); if (b) b.onclick = () => { carnet.splice(i, 1); sauverCarnet(); }; })
       .addTo(groupeCarnet);
   });
   const zone = document.getElementById("carnet");
-  if (!carnet.length) { zone.innerHTML = `<label class="titre">Mon carnet</label><p class="aide">Touchez la carte à l'endroit d'une cueillette, puis « J'en ai trouvé ici » ou « Rien trouvé ici ». Vos notes restent dans ce téléphone.</p>`; return; }
   const nb = carnet.filter((n) => !n.absent).length;
-  zone.innerHTML = `<label class="titre">Mon carnet</label>${nb} trouvaille${nb > 1 ? "s" : ""}, ${carnet.length - nb} sortie${carnet.length - nb > 1 ? "s" : ""} sans rien. ` +
-    `Ces notes restent dans ce téléphone.<div class="ligne-carnet"><button id="copier-carnet">Copier mes notes</button></div>` +
-    `<p class="aide" id="aide-carnet">Collez-les dans la conversation avec Claude pour que la carte en tienne compte.</p>`;
-  document.getElementById("copier-carnet").onclick = async () => {
+  let h = `<label class="titre">Mon carnet</label>`;
+  if (formulaire) h += htmlFormulaire();
+  else h += `<div class="ligne-carnet"><button class="principal" id="note-ajouter">＋ Ajouter une trouvaille</button>` +
+    (carnet.length ? `<button id="copier-carnet">Copier mes notes</button>` : "") + `</div>`;
+  h += carnet.length ? `<p class="aide" id="aide-carnet">${nb} trouvaille${nb > 1 ? "s" : ""}, ${carnet.length - nb} sortie${carnet.length - nb > 1 ? "s" : ""} sans rien. ` +
+      `Ces notes restent dans ce téléphone. Pour que la carte en tienne compte, copiez-les et collez-les dans la conversation avec Claude.</p>`
+    : `<p class="aide" id="aide-carnet">Notez vos trouvailles, quel que soit le champignon : à votre position, ou en touchant la carte. Elles s'affichent sur la carte et restent dans ce téléphone.</p>`;
+  const lignes = carnet.map((n, i) => [n, i]).reverse().slice(0, 40);
+  if (lignes.length) h += `<ul>${lignes.map(([n, i]) => `<li><button class="lieu" data-i="${i}">${n.absent ? "❌" : "✅"} ${sur(nomNote(n))} · ` +
+    `${new Date(n.date + "T12:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}</button>` +
+    `<button class="oter" data-o="${i}" aria-label="Effacer cette note">✕</button></li>`).join("")}</ul>`;
+  zone.innerHTML = h;
+  if (formulaire) brancherFormulaire();
+  else document.getElementById("note-ajouter").onclick = () => ouvrirFormulaire(null);
+  zone.querySelectorAll("button[data-i]").forEach((b) => b.onclick = () => { const n = carnet[+b.dataset.i]; deplierPanneau(false); carte.setView([n.lat, n.lon], Math.max(carte.getZoom(), 15)); });
+  zone.querySelectorAll("button[data-o]").forEach((b) => b.onclick = () => { carnet.splice(+b.dataset.o, 1); sauverCarnet(); });
+  const copier = document.getElementById("copier-carnet");
+  if (copier) copier.onclick = async () => {
     const texte = JSON.stringify(carnet);
     try { await navigator.clipboard.writeText(texte); document.getElementById("aide-carnet").textContent = "Notes copiées : collez-les dans la conversation avec Claude."; }
     catch (e) { document.getElementById("aide-carnet").textContent = texte; }
