@@ -499,7 +499,7 @@ function afficherSosies() {
         `<figcaption>${sur(legende)}<span class="credit">${sur(auteur)}, ${sur(licence)}</span></figcaption></figure>`).join("")}</div>` +
       `<div>${sur(c.diff)}</div></div>`).join("") +
     `<p class="aide">Aucun critère ne suffit seul : tous doivent correspondre, sur chaque champignon. Une photo montre un exemplaire parmi d'autres ; couleurs et formes varient. Touchez une photo pour la voir en grand.</p>` +
-    `<p class="aide">Sources recoupées : ${s.sources.map(([t, u]) => `<a href="${u}" target="_blank" rel="noopener">${sur(t)}</a>`).join(" ; ")}.</p>`;
+    `<p class="aide">Sources consultées : ${s.sources.map(([t, u]) => `<a href="${u}" target="_blank" rel="noopener">${sur(t)}</a>`).join(" ; ")}.</p>`;
 }
 
 function afficherCle() {
