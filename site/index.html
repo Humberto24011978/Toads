@@ -271,6 +271,10 @@ const FICHES = {
   pied_de_mouton: { latin: "Hydnum repandum, H. rufescens", periode: "août à décembre",
     milieu: "Feuillus et résineux, souvent en cercles dans la mousse", sol: "Indifférent, souvent un peu calcaire",
     conseil: "Facile à reconnaître : des aiguillons sous le chapeau au lieu de lamelles. Supporte les premières gelées." },
+  russule: { latin: "Russula cyanoxantha", periode: "juin à novembre",
+    milieu: "Feuillus surtout : hêtres, chênes, châtaigniers ; plus rare sous les résineux", sol: "Indifférent, plutôt frais",
+    conseil: "Chapeau de couleur très variable (violet, gris ardoise, vert, souvent mêlés). Son signe sûr : des lames blanches, souples et grasses au toucher, qui plient sous le doigt au lieu de se briser.",
+    attention: "Les formes vertes peuvent être confondues avec l'amanite phalloïde, mortelle : une russule n'a jamais d'anneau ni de sac à la base du pied. Déterrez toujours le pied en entier." },
   morille: { latin: "Morchella (M. esculenta, M. elata, M. vulgaris…)", periode: "mars à mai",
     milieu: "Forêts alluviales (frênes, ormes, peupliers), bords de rivières, vergers, lisières ; parfois copeaux de bois",
     sol: "Calcaire ou alluvions, plutôt riche",
@@ -441,6 +445,12 @@ const CLES = {
   pied_de_mouton: [
     ["Sous le chapeau, ce sont de petits aiguillons serrés qui se détachent au doigt, sans lames ni tubes ?", "Sans aiguillons, ce n'est pas un pied de mouton."],
     ["Le chapeau est crème à orangé pâle, la chair claire et cassante ?", "Un chapeau brun écailleux à aiguillons gris évoque d'autres hydnes, amers ou coriaces."],
+  ],
+  russule: [
+    ["Le pied, déterré en entier, est blanc et nu : ni anneau, ni sac (volve) à sa base ?", "Un anneau ou un sac à la base du pied : danger. Ce peut être l'amanite phalloïde, mortelle, dont le chapeau verdâtre ressemble aux russules vertes."],
+    ["Le pied se casse net comme un bâton de craie, sans faire de fibres ?", "Un pied fibreux qui s'effiloche n'est pas celui d'une russule : ne le consommez pas."],
+    ["Les lames sont blanches, souples et grasses au toucher : elles plient sous le doigt sans se briser ?", "Des lames qui s'émiettent sous le doigt sont celles d'une autre russule, parfois âcre et indigeste."],
+    ["Un petit morceau de chair crue, mâché quelques secondes puis recraché, a un goût doux (noisette), ni piquant ni amer ? Ne faites ce test que si les trois critères précédents sont bons.", "Un goût piquant ou brûlant est celui des russules âcres (russule émétique, russule fragile), indigestes."],
   ],
   morille: [
     ["Coupée en deux dans la longueur, elle est entièrement creuse, d'une seule cavité du chapeau au pied ?", "Un intérieur cloisonné ou rempli : danger. Ce peut être un gyromitre, mortel."],

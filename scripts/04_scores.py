@@ -46,6 +46,9 @@ ARBRES = {
                              douglas_meleze=.6, coniferes=.8, peuplier_robinier=0, foret_autre=.3, lande=.2),
     "pied_de_mouton":   dict(chene=.9, hetre=1, chataignier=.7, feuillus=.8, mixte=.9, sapin_epicea=.9, pin=.6,
                              douglas_meleze=.5, coniferes=.7, peuplier_robinier=.1, foret_autre=.4, lande=.1),
+    # Russule charbonnière : feuillus (hêtres, chênes, châtaigniers), plus rare sous les résineux
+    "russule":          dict(chene=.9, hetre=1, chataignier=.8, feuillus=.8, mixte=.7, sapin_epicea=.3, pin=.25,
+                             douglas_meleze=.15, coniferes=.25, peuplier_robinier=.1, foret_autre=.4, lande=.05),
     # Morille : forêts alluviales (frênes, ormes, peupliers), feuillus frais, vergers et jardins, lisières
     "morille":          dict(chene=.6, hetre=.3, chataignier=.1, feuillus=1, mixte=.4, sapin_epicea=.15, pin=.2,
                              douglas_meleze=.1, coniferes=.1, peuplier_robinier=1, foret_autre=.6, lande=.1,
@@ -74,6 +77,7 @@ SOL_ALT = {
     "rose_des_pres":    dict(ph=(5.7, 8.5), marge=0.8, alt=(100, 1100)),
     "coprin":           dict(ph=(5.6, 8.5), marge=0.8, alt=(100, 1000)),
     "pied_de_mouton":   dict(ph=(5.2, 6.8), marge=0.8, alt=(100, 1300)),
+    "russule":          dict(ph=(4.2, 6.6), marge=1.0, alt=(100, 1100)),
     "morille":          dict(ph=(6.2, 8.5), marge=1.0, alt=(100, 500)),
 }
 
@@ -82,7 +86,7 @@ THERMOPHILE = {"cepe_ete": .25, "cepe_bronze": .5}
 # Hauteur moyenne des arbres (m) à partir de laquelle le peuplement convient pleinement.
 # En dessous de 3 m (coupe rase, jeune plantation), il ne reste presque rien pour les espèces liées aux arbres.
 HAUTEUR_PLEINE = {"cepe_bordeaux": 10, "cepe_ete": 12, "cepe_bronze": 12, "cepe_pins": 10, "girolle": 10,
-                  "trompette": 15, "chanterelle_tube": 12, "pied_de_mouton": 12}
+                  "trompette": 15, "chanterelle_tube": 12, "pied_de_mouton": 12, "russule": 15}
 
 VARIABLES_RELIEF = ["altitude", "pente", "nordicite", "tpi", "tpi_large", "ph"]
 MIN_OBS = 25                # carrés observés : en dessous, pas de modèle, les règles seules
