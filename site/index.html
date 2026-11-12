@@ -646,7 +646,7 @@ async function chercherAutour(ajuster) {
 const STATUTS_FORET = ["Forêt privée ou statut non renseigné", "Forêt domaniale (publique)", "Forêt communale ou autre forêt publique"];
 // Par défaut, seules les forêts publiques sont proposées : ailleurs, on ne peut en général ni entrer ni cueillir
 let publiquesSeules = true, voilePrive = null;
-try { publiquesSeules = localStorage.getItem("toads-publiques") !== "0"; } catch (e) {}
+try { publiquesSeules = localStorage.getItem("toads-acces") !== "0"; } catch (e) {}
 // Champignons des prés et des bords de chemins : le filtre « forêts publiques » n'a pas de sens pour eux
 const HORS_FORET = ["coulemelle", "rose_des_pres", "coprin"];
 const filtrePublic = () => publiquesSeules && !!info && !!info.acces && !HORS_FORET.includes(espece);
@@ -659,7 +659,7 @@ const casePubliques = document.getElementById("publiques");
 casePubliques.checked = publiquesSeules;
 casePubliques.onchange = () => {
   publiquesSeules = casePubliques.checked;
-  try { localStorage.setItem("toads-publiques", publiquesSeules ? "1" : "0"); } catch (e) {}
+  try { localStorage.setItem("toads-acces", publiquesSeules ? "1" : "0"); } catch (e) {}
   afficherVoile();
   chercherAutour(false);
 };
