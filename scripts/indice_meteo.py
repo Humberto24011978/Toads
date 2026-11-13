@@ -44,17 +44,18 @@ PARAMS = {
     "morille":          dict(delai=(5, 18), marge_delai=7, tsol=(7, 13), marge_t=3, tsol_actuel=5, gel=.5),
 }
 
-# Coefficient de saison (mois -> 0 à 1) : souple, c'est surtout la météo qui décide
+# Coefficient de saison (mois -> 0 à 1) : souple, c'est surtout la météo qui décide.
+# Recoupé en novembre 2026 avec le calendrier de les-champignons.fr (pics et fins de saison).
 SAISON = {
-    "cepe_bordeaux":    {6: .15, 7: .5, 8: .8, 9: 1, 10: 1, 11: .8, 12: .3},
-    "cepe_ete":         {5: .5, 6: 1, 7: 1, 8: 1, 9: .8, 10: .35},
-    "cepe_bronze":      {6: .4, 7: .9, 8: 1, 9: 1, 10: .5},
+    "cepe_bordeaux":    {6: .15, 7: .5, 8: .8, 9: 1, 10: 1, 11: .8, 12: .15},
+    "cepe_ete":         {5: .5, 6: .9, 7: 1, 8: 1, 9: .8, 10: .5, 11: .1},
+    "cepe_bronze":      {6: .4, 7: 1, 8: 1, 9: .9, 10: .3},
     "cepe_pins":        {4: .2, 5: .8, 6: .8, 7: .3, 8: .5, 9: 1, 10: 1, 11: .6},
-    "girolle":          {5: .3, 6: .8, 7: 1, 8: 1, 9: 1, 10: 1, 11: .5, 12: .1},
-    "trompette":        {7: .3, 8: .7, 9: 1, 10: 1, 11: 1, 12: .6, 1: .2},
+    "girolle":          {5: .3, 6: .8, 7: 1, 8: 1, 9: 1, 10: .8, 11: .25},
+    "trompette":        {7: .2, 8: .6, 9: .9, 10: 1, 11: 1, 12: .4, 1: .1},
     "chanterelle_tube": {8: .4, 9: 1, 10: 1, 11: 1, 12: 1, 1: .5, 2: .2},
-    "coulemelle":       {6: .5, 7: 1, 8: 1, 9: 1, 10: 1, 11: .5},
-    "rose_des_pres":    {5: .3, 6: .6, 7: .8, 8: 1, 9: 1, 10: 1, 11: .5},
+    "coulemelle":       {6: .3, 7: .7, 8: .9, 9: 1, 10: 1, 11: .5},
+    "rose_des_pres":    {5: .2, 6: .3, 7: .6, 8: .8, 9: 1, 10: 1, 11: .6},
     "coprin":           {3: .3, 4: .6, 5: .7, 6: .5, 7: .5, 8: .6, 9: 1, 10: 1, 11: 1, 12: .5},
     "pied_de_mouton":   {7: .4, 8: .8, 9: 1, 10: 1, 11: 1, 12: .8, 1: .3},
     "russule":          {6: .5, 7: 1, 8: 1, 9: 1, 10: .9, 11: .4},
