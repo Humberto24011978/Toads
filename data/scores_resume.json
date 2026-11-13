@@ -179,6 +179,36 @@
   ],
   "part_favorable": 14.9
  },
+ "lactaire": {
+  "observations": 160,
+  "observations_region": 9,
+  "auc": 0.725,
+  "poids_modele": 0.8,
+  "variables_cles": [
+   "sable",
+   "altitude",
+   "pin_sylvestre",
+   "lc_coniferes",
+   "lc_feuillus",
+   "lc_mixte"
+  ],
+  "part_favorable": 0.8
+ },
+ "bolet_bai": {
+  "observations": 334,
+  "observations_region": 46,
+  "auc": 0.673,
+  "poids_modele": 0.69,
+  "variables_cles": [
+   "lc_coniferes",
+   "ph_edc",
+   "altitude",
+   "nordicite",
+   "lc_feuillus",
+   "pin_sylvestre"
+  ],
+  "part_favorable": 8.3
+ },
  "morille": {
   "observations": 91,
   "observations_region": 18,

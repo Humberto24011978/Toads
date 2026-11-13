@@ -1,15 +1,15 @@
 {
- "date": "2026-11-12",
+ "date": "2026-11-13",
  "especes": {
   "cepe_bordeaux": {
    "presences": 661,
-   "temoins": 6705,
-   "auc_defaut": 0.611,
-   "auc_appris": 0.612,
+   "temoins": 7269,
+   "auc_defaut": 0.599,
+   "auc_appris": 0.607,
    "retenu": false,
    "delai": [
     9,
-    22
+    18
    ],
    "tsol": [
     9,
@@ -20,13 +20,13 @@
   },
   "cepe_ete": {
    "presences": 425,
-   "temoins": 7169,
-   "auc_defaut": 0.697,
-   "auc_appris": 0.661,
+   "temoins": 7894,
+   "auc_defaut": 0.808,
+   "auc_appris": 0.788,
    "retenu": false,
    "delai": [
-    7,
-    22
+    2,
+    26
    ],
    "tsol": [
     13,
@@ -37,23 +37,23 @@
   },
   "cepe_bronze": {
    "presences": 54,
-   "auc_defaut": 0.727,
+   "auc_defaut": 0.733,
    "retenu": false
   },
   "cepe_pins": {
    "presences": 33,
-   "auc_defaut": 0.516,
+   "auc_defaut": 0.511,
    "retenu": false
   },
   "girolle": {
    "presences": 773,
-   "temoins": 6630,
+   "temoins": 7248,
    "auc_defaut": 0.523,
-   "auc_appris": 0.588,
+   "auc_appris": 0.601,
    "retenu": true,
    "delai": [
     2,
-    30
+    26
    ],
    "tsol": [
     13,
@@ -64,60 +64,60 @@
   },
   "trompette": {
    "presences": 284,
-   "temoins": 7250,
-   "auc_defaut": 0.623,
-   "auc_appris": 0.616,
+   "temoins": 7961,
+   "auc_defaut": 0.602,
+   "auc_appris": 0.588,
    "retenu": false,
    "delai": [
-    2,
-    10
+    7,
+    30
    ],
    "tsol": [
     3,
-    13
+    21
    ],
    "trouvailles": 0,
    "reglages_refuses_par_trouvailles": 0
   },
   "chanterelle_tube": {
    "presences": 209,
-   "temoins": 7300,
-   "auc_defaut": 0.689,
-   "auc_appris": 0.694,
+   "temoins": 8011,
+   "auc_defaut": 0.63,
+   "auc_appris": 0.634,
    "retenu": false,
    "delai": [
-    9,
+    7,
     30
    ],
    "tsol": [
     3,
-    11
+    13
    ],
    "trouvailles": 0,
    "reglages_refuses_par_trouvailles": 0
   },
   "coulemelle": {
    "presences": 736,
-   "temoins": 6718,
-   "auc_defaut": 0.514,
-   "auc_appris": 0.589,
+   "temoins": 7304,
+   "auc_defaut": 0.477,
+   "auc_appris": 0.553,
    "retenu": true,
    "delai": [
     9,
-    14
+    18
    ],
    "tsol": [
     9,
-    13
+    15
    ],
    "trouvailles": 0,
    "reglages_refuses_par_trouvailles": 0
   },
   "rose_des_pres": {
    "presences": 130,
-   "temoins": 7534,
-   "auc_defaut": 0.395,
-   "auc_appris": 0.422,
+   "temoins": 8260,
+   "auc_defaut": 0.437,
+   "auc_appris": 0.491,
    "retenu": true,
    "delai": [
     2,
@@ -132,12 +132,12 @@
   },
   "coprin": {
    "presences": 916,
-   "temoins": 6860,
-   "auc_defaut": 0.54,
-   "auc_appris": 0.656,
+   "temoins": 7495,
+   "auc_defaut": 0.526,
+   "auc_appris": 0.676,
    "retenu": true,
    "delai": [
-    5,
+    2,
     22
    ],
    "tsol": [
@@ -149,9 +149,9 @@
   },
   "pied_de_mouton": {
    "presences": 477,
-   "temoins": 6880,
-   "auc_defaut": 0.522,
-   "auc_appris": 0.56,
+   "temoins": 7478,
+   "auc_defaut": 0.507,
+   "auc_appris": 0.541,
    "retenu": true,
    "delai": [
     2,
@@ -159,16 +159,16 @@
    ],
    "tsol": [
     3,
-    15
+    17
    ],
    "trouvailles": 0,
    "reglages_refuses_par_trouvailles": 0
   },
   "russule": {
    "presences": 565,
-   "temoins": 6915,
-   "auc_defaut": 0.643,
-   "auc_appris": 0.686,
+   "temoins": 7614,
+   "auc_defaut": 0.682,
+   "auc_appris": 0.751,
    "retenu": true,
    "delai": [
     2,
@@ -181,11 +181,45 @@
    "trouvailles": 0,
    "reglages_refuses_par_trouvailles": 0
   },
+  "lactaire": {
+   "presences": 227,
+   "temoins": 8134,
+   "auc_defaut": 0.579,
+   "auc_appris": 0.668,
+   "retenu": true,
+   "delai": [
+    9,
+    18
+   ],
+   "tsol": [
+    3,
+    11
+   ],
+   "trouvailles": 0,
+   "reglages_refuses_par_trouvailles": 0
+  },
+  "bolet_bai": {
+   "presences": 432,
+   "temoins": 7459,
+   "auc_defaut": 0.593,
+   "auc_appris": 0.596,
+   "retenu": false,
+   "delai": [
+    3,
+    14
+   ],
+   "tsol": [
+    3,
+    11
+   ],
+   "trouvailles": 0,
+   "reglages_refuses_par_trouvailles": 0
+  },
   "morille": {
    "presences": 157,
-   "temoins": 7741,
-   "auc_defaut": 0.66,
-   "auc_appris": 0.851,
+   "temoins": 8449,
+   "auc_defaut": 0.564,
+   "auc_appris": 0.766,
    "retenu": true,
    "delai": [
     9,
