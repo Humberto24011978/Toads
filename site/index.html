@@ -133,6 +133,8 @@
   .resultats ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
   .resultats button { width: 100%; display: flex; gap: 10px; align-items: center; text-align: left; background: #fff; border: 1px solid var(--ligne);
     border-radius: 10px; padding: 7px 9px; cursor: pointer; font-size: 13.5px; color: var(--encre); }
+  .top-carte { margin: 10px 0 14px; }
+  .top-carte .jour-top { font-size: 12.5px; font-weight: 700; margin: 8px 0 4px; }
   .resultats button:hover { border-color: var(--mousse); }
   .resultats .km { color: var(--gris); }
   .num, .coin span { flex: none; width: 24px; height: 24px; border-radius: 50%; color: #fff; display: flex; align-items: center; justify-content: center;
@@ -183,6 +185,7 @@
       <div class="jours" id="jours" role="group" aria-label="Jour affiché"></div>
       <p class="jours-legende" id="jours-legende"></p>
     </div>
+    <div class="resultats top-carte" id="top-carte"></div>
 
     <div class="etat" id="etat">
       <div class="statut"><span class="pt"></span><span>Chargement…</span></div>
@@ -535,6 +538,7 @@ function afficher() {
   document.getElementById("note-pres").hidden = !HORS_FORET.includes(espece);
   afficherAvenir();
   afficherJours();
+  afficherTop();
   document.getElementById("mode-jour").setAttribute("aria-pressed", mode === "jour");
   document.getElementById("mode-potentiel").setAttribute("aria-pressed", mode === "potentiel");
 
@@ -646,6 +650,67 @@ function placerCentre(latlng, ajuster) {
   return chercherAutour(ajuster);
 }
 
+// ---- Les 3 meilleurs coins de toute la carte, aujourd'hui et demain ----
+const NB_TOP = 3, ECART_TOP_KM = 10, communes = {};
+const groupeTop = L.layerGroup().addTo(carte);
+let tourTop = 0;
+function nomCommune(lat, lon) {
+  const cle = lat + "," + lon;
+  if (!communes[cle]) communes[cle] = fetch(`https://geo.api.gouv.fr/communes?lat=${lat}&lon=${lon}&fields=nom,codeDepartement`)
+    .then((r) => r.json()).then((j) => j[0] ? `${j[0].nom} (${j[0].codeDepartement})` : "").catch(() => "");
+  return communes[cle];
+}
+function fichierSecteurs(nom) {
+  if (!secteursCharges[nom]) secteursCharges[nom] = fetch(`cartes/secteurs_${nom}.json?d=${info.date}`).then((r) => r.json())
+    .catch(() => { delete secteursCharges[nom]; return []; });
+  return secteursCharges[nom];
+}
+function meilleursCarte(liste) {
+  const pris = [];
+  for (const [lat, lng, sc, st] of liste) {          // la liste est déjà triée du meilleur au moins bon
+    if (filtrePublic() && !(st > 0)) continue;
+    if (pris.some((c) => distanceKm(c, { lat, lng }) < ECART_TOP_KM)) continue;
+    pris.push({ lat, lng, s: sc, st: st || 0 });
+    if (pris.length === NB_TOP) break;
+  }
+  return pris;
+}
+async function afficherTop() {
+  const zone = document.getElementById("top-carte"), tour = ++tourTop;
+  groupeTop.clearLayers();
+  if (!info || mode !== "jour") { zone.innerHTML = ""; return; }
+  const esp = espece, jours = prevEspece(esp) ? [0, 1] : [0];
+  const listes = await Promise.all(jours.map((k) => fichierSecteurs(`${esp}_j${k}`)));
+  if (tour !== tourTop) return;
+  const tops = listes.map((l) => meilleursCarte(Array.isArray(l) ? l : []));
+  const titre = (k) => k === 0 ? "Aujourd'hui" : `Demain (${dateFr(info.previsions.dates[1])})`;
+  zone.innerHTML = `<label class="titre">Les 3 meilleurs coins de toute la carte</label>` + jours.map((k, n) =>
+    `<div class="jour-top">${titre(k)}</div>` + (tops[n].length ? `<ol>${tops[n].map((c, i) =>
+      `<li><button data-j="${n}" data-i="${i}"><span class="num" style="background:${couleurScore(c.s)}">${i + 1}</span>` +
+      `<span>Score ${c.s} <span class="km" data-lieu="${n}-${i}"></span>` +
+      (info.acces && !HORS_FORET.includes(esp) ? `<span class="statut-coin">${STATUTS_FORET[c.st]}</span>` : "") + `</span></button></li>`).join("")}</ol>`
+      : `<p class="aide">Aucun coin favorable sur la carte ${k === 0 ? "aujourd'hui" : "demain"}.</p>`)).join("") +
+    (filtrePublic() ? `<p class="aide">En forêt publique seulement, à au moins ${ECART_TOP_KM} km les uns des autres.</p>` : "");
+  tops.forEach((l, n) => l.forEach((c, i) => nomCommune(c.lat, c.lng).then((nom) => {
+    const el = zone.querySelector(`[data-lieu="${n}-${i}"]`);
+    if (el && tour === tourTop && nom) el.textContent = "· " + nom;
+    c.nom = nom;
+  })));
+  zone.querySelectorAll("button").forEach((b) => b.onclick = () => {
+    const n = +b.dataset.j, c = tops[n][+b.dataset.i];
+    if (jourSel !== jours[n]) { jourSel = jours[n]; afficher(); }
+    groupeTop.clearLayers();
+    const lien = `https://www.google.com/maps/dir/?api=1&destination=${c.lat},${c.lng}`;
+    const m = L.marker([c.lat, c.lng], { zIndexOffset: 900,
+      icon: L.divIcon({ className: "coin", html: `<span style="background:${couleurScore(c.s)}">★</span>`, iconSize: [30, 30], iconAnchor: [15, 15] }) })
+      .bindPopup(`<b>${titre(jours[n])} : coin n° ${+b.dataset.i + 1} de la carte</b><br>Score ${c.s}/1000${c.nom ? " · " + sur(c.nom) : ""}` +
+        (info.acces ? `<br>${STATUTS_FORET[c.st]}` : "") + `<br><a href="${lien}" target="_blank" rel="noopener">Itinéraire</a>`).addTo(groupeTop);
+    if (window.innerWidth <= 640 && !document.getElementById("panneau").classList.contains("plie")) document.getElementById("plier").click();
+    carte.setView(m.getLatLng(), Math.max(carte.getZoom(), 14));
+    m.openPopup();
+  });
+}
+
 async function chercherAutour(ajuster) {
   if (!centre || !info) return;
   if (!cercle) cercle = L.circle(centre, { radius: rayon * 1000, color: "#1f3a2b", weight: 1.5, dashArray: "5 6", fill: false, interactive: false }).addTo(carte);
@@ -714,6 +779,7 @@ casePubliques.onchange = () => {
   publiquesSeules = casePubliques.checked;
   try { localStorage.setItem("toads-acces", publiquesSeules ? "1" : "0"); } catch (e) {}
   afficherVoile();
+  afficherTop();
   chercherAutour(false);
 };
 
