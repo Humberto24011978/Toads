@@ -263,12 +263,15 @@ def voile(prive, merc, chemin):
 
 
 def secteurs(grille, seuil, statut=None, rayon=6):
-    """Meilleurs secteurs d'une carte : moyenne sur 300 m, puis un seul point par voisinage de ~1,2 km.
+    """Meilleurs secteurs d'une carte : le meilleur carré de 100 m de chaque voisinage de ~1,2 km.
+
+    Le score publié est celui du carré lui-même, arrondi comme sur l'image (tranches de 4 points) : toucher la
+    carte à cet endroit donne le même chiffre, et aucun carré à moins de 600 m n'en a un plus élevé.
 
     Renvoie [[lat, lon, score, statut], ...] du meilleur au moins bon ; statut : 0 forêt privée ou statut
     inconnu, 1 forêt domaniale, 2 autre forêt publique.
     """
-    lisse = ndimage.uniform_filter(grille.astype("float32"), size=3)
+    lisse = np.minimum(np.ceil(grille.astype("float32") / PAS_COULEUR) * PAS_COULEUR, MAX)
     lig, col = np.nonzero(lisse >= seuil)
     ordre = np.argsort(-lisse[lig, col], kind="stable")
     pris = np.zeros(lisse.shape, dtype=bool)
