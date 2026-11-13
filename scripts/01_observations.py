@@ -64,7 +64,7 @@ def inaturalist(nom, **filtres):
     dernier = 0
     while True:
         page = get(INAT, {
-            "taxon_name": nom, "quality_grade": "research", "geoprivacy": "open", "taxon_geoprivacy": "open",
+            **({} if "taxon_id" in filtres else {"taxon_name": nom}), "quality_grade": "research", "geoprivacy": "open", "taxon_geoprivacy": "open",
             "swlng": lon1, "swlat": lat1, "nelng": lon2, "nelat": lat2,
             "per_page": 200, "order_by": "id", "order": "asc", "id_above": dernier, **filtres,
         }).json()
@@ -160,8 +160,11 @@ def groupe_cible(cles_suivies):
             deja = {cle_doublon(l["lon"], l["lat"], l["date"]) for l in csv.DictReader(f)}
         with open(DATA / "fond.csv", "a", newline="", encoding="utf-8") as f:
             w = csv.writer(f)
-            for nom in GROUPE_CIBLE:
-                for o in inaturalist(nom, acc_below=PRECISION_FOND + 1):
+            for nom, rang in GROUPE_CIBLE.items():
+                # Les grands groupes se désignent par leur numéro : la recherche par nom ne les trouve pas
+                taxons = get(INAT.replace("observations", "taxa"), {"q": nom, "rank": rang.lower()}).json()["results"]
+                numero = next(t["id"] for t in taxons if t["name"] == nom)
+                for o in inaturalist(nom, taxon_id=numero, acc_below=PRECISION_FOND + 1):
                     cle = cle_doublon(o["lon"], o["lat"], o["date"])
                     if cle in deja or not o["precision"]:
                         continue
