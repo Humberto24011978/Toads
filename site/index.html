@@ -546,7 +546,7 @@ function afficher() {
 
   if (couche) carte.removeLayer(couche);
   const fichier = mode === "potentiel" ? `${espece}_potentiel` : (p ? `${espece}_j${jourSel}` : `${espece}_jour`);
-  couche = L.imageOverlay(`cartes/${fichier}.png?d=${info.date}`, info.bornes, { opacity: 0.85, interactive: false }).addTo(carte);
+  couche = L.imageOverlay(`cartes/${fichier}.png?d=${info.version || info.date}`, info.bornes, { opacity: 0.85, interactive: false }).addTo(carte);
   afficherVoile();
 
   const etat = document.getElementById("etat");
@@ -618,7 +618,7 @@ curseur.value = rayon; texteRayon.textContent = rayon + " km";
 function chargerSecteurs(esp) {
   const nomFichier = mode === "potentiel" ? `${esp}_potentiel` : `${esp}_j${prevEspece(esp) ? jourSel : 0}`;
   if (!secteursCharges[nomFichier]) {
-    secteursCharges[nomFichier] = fetch(`cartes/secteurs_${nomFichier}.json?d=${info.date}`).then((r) => r.json())
+    secteursCharges[nomFichier] = fetch(`cartes/secteurs_${nomFichier}.json?d=${info.version || info.date}`).then((r) => r.json())
       .catch(() => { delete secteursCharges[nomFichier]; return []; });
   }
   return secteursCharges[nomFichier];
@@ -663,7 +663,7 @@ function nomCommune(lat, lon) {
   return communes[cle];
 }
 function fichierSecteurs(nom) {
-  if (!secteursCharges[nom]) secteursCharges[nom] = fetch(`cartes/secteurs_${nom}.json?d=${info.date}`).then((r) => r.json())
+  if (!secteursCharges[nom]) secteursCharges[nom] = fetch(`cartes/secteurs_${nom}.json?d=${info.version || info.date}`).then((r) => r.json())
     .catch(() => { delete secteursCharges[nom]; return []; });
   return secteursCharges[nom];
 }
@@ -773,7 +773,7 @@ const filtrePublic = () => publiquesSeules && !!info && !!info.acces && !HORS_FO
 function afficherVoile() {
   if (voilePrive) { carte.removeLayer(voilePrive); voilePrive = null; }
   if (!info || !info.voile || !filtrePublic()) return;
-  voilePrive = L.imageOverlay(`cartes/prive.png?d=${info.date}`, info.bornes, { interactive: false, zIndex: 2 }).addTo(carte);
+  voilePrive = L.imageOverlay(`cartes/prive.png?d=${info.version || info.date}`, info.bornes, { interactive: false, zIndex: 2 }).addTo(carte);
 }
 const casePubliques = document.getElementById("publiques");
 casePubliques.checked = publiquesSeules;
@@ -882,7 +882,7 @@ function chargerImage(fichier) {
     imagesLues[fichier] = new Promise((ok) => {
       const i = new Image();
       i.onload = () => ok(i); i.onerror = () => ok(null);
-      i.src = `cartes/${fichier}.png?d=${info.date}`;
+      i.src = `cartes/${fichier}.png?d=${info.version || info.date}`;
     });
   }
   return imagesLues[fichier];
@@ -901,8 +901,11 @@ async function scoreAu(latlng, fichier) {
     ctxPixel.drawImage(img, px, py, 1, 1, 0, 0, 1, 1);
     const [r, g, b, a] = ctxPixel.getImageData(0, 0, 1, 1).data;
     if (a < 40) return 0;
-    let meilleur = 0, ecart = Infinity;
-    c.table.forEach((t, i) => { if (!t[3]) return; const e = (t[0] - r) ** 2 + (t[1] - g) ** 2 + (t[2] - b) ** 2; if (e < ecart) { ecart = e; meilleur = i; } });
+    // L'opacité est restituée exactement et désigne quelques tranches seulement ; la couleur départage
+    const proche = (exact) => { let m = 0, ecart = Infinity;
+      c.table.forEach((t, i) => { if (!t[3] || (exact && t[3] !== a)) return; const e = (t[0] - r) ** 2 + (t[1] - g) ** 2 + (t[2] - b) ** 2; if (e < ecart) { ecart = e; m = i; } });
+      return m; };
+    const meilleur = proche(true) || proche(false);
     return meilleur * c.pas;
   } catch (e) { return null; }
 }

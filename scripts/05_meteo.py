@@ -222,8 +222,15 @@ def couleur(v):
 
 def table_couleurs():
     """Couleur (rouge, vert, bleu, opacité) de chaque tranche ; la tranche 0 est transparente."""
-    return [[0, 0, 0, 0]] + [couleur(min(i * PAS_COULEUR, MAX)) if i * PAS_COULEUR >= SEUIL else [0, 0, 0, 0]
-                             for i in range(1, MAX // PAS_COULEUR + 1)]
+    table = [[0, 0, 0, 0]] + [couleur(min(i * PAS_COULEUR, MAX)) if i * PAS_COULEUR >= SEUIL else [0, 0, 0, 0]
+                              for i in range(1, MAX // PAS_COULEUR + 1)]
+    # La page relit le score d'un pixel à sa couleur. L'opacité, que le navigateur restitue exactement, porte le
+    # numéro de la tranche modulo 4 (écart invisible) : deux tranches de même opacité ont des couleurs bien distinctes.
+    for i, c in enumerate(table):
+        if c[3]:
+            c[:] = [int(x) for x in c]
+            c[3] -= (c[3] - i) % 4
+    return table
 
 
 def preparer_mercator():
@@ -519,6 +526,7 @@ def main():
     pluie_passee = m["pluie"][:, :a + 1]
     ecrire_json(sortie / "info.json", {
         "date": aujourdhui.isoformat(),
+        "version": dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d%H%M"),
         "bornes": merc["bornes"],
         "mercator": merc["mercator"],
         "couleurs": {"pas": PAS_COULEUR, "seuil": SEUIL, "table": table},
