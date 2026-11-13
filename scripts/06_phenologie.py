@@ -41,15 +41,18 @@ def trouvailles():
 
     Format : [{"espece": "cepe_bordeaux", "lat": 48.5, "lon": 7.3, "date": "2026-11-07"}, ...]
     « espece » peut être un groupe (« cepe ») quand l'espèce exacte n'est pas connue ; une ligne avec
-    "absent": true note une sortie sans rien trouver (gardée pour mémoire, pas utilisée ici).
+    "absent": true note une sortie sans rien trouver (gardée pour mémoire, pas utilisée ici) ;
+    "date_approx": true marque une date incertaine : la trouvaille sert à la carte des lieux, pas au réglage de la saison.
     """
     brut = os.environ.get("TROUVAILLES", "").strip()
     if not brut:
         return pd.DataFrame(columns=["espece", "lat", "lon", "date"])
     t = pd.DataFrame(json.loads(brut))
-    if "absent" in t:
-        t = t[~t["absent"].fillna(False).astype(bool)]
-    t["date"] = pd.to_datetime(t["date"])
+    for drapeau in ("absent", "date_approx"):      # sorties bredouilles, dates incertaines : pas pour régler la saison
+        if drapeau in t:
+            t = t[~t[drapeau].fillna(False).astype(bool)]
+    t["date"] = pd.to_datetime(t["date"], errors="coerce")
+    t = t.dropna(subset=["date"])
     return t[["espece", "lat", "lon", "date"]].reset_index(drop=True)
 
 
