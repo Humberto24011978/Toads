@@ -303,6 +303,11 @@ def secteurs(grille, seuil, statut, merc, rayon=6):
             for a, o, val, e in zip(lat, lon, v[li, c], st)]
 
 
+PHASES = [("Nouvelle lune", "🌑"), ("Premier croissant", "🌒"), ("Premier quartier", "🌓"),
+          ("Gibbeuse croissante", "🌔"), ("Pleine lune", "🌕"), ("Gibbeuse décroissante", "🌖"),
+          ("Dernier quartier", "🌗"), ("Dernier croissant", "🌘")]
+
+
 def lune(jour):
     """Phase de la lune à midi (heure de Paris) et dates des prochaines nouvelle et pleine lunes."""
     paris = ZoneInfo("Europe/Paris")
