@@ -16,6 +16,8 @@ import os
 from zoneinfo import ZoneInfo
 
 import ephem
+import math
+
 import numpy as np
 from PIL import Image
 from pyproj import Transformer
@@ -331,6 +333,20 @@ def masque_zone(masque):
     return masque & ((x - cx) ** 2 + (y - cy) ** 2 <= (ZONE["rayon_km"] * 1000) ** 2)
 
 
+def meilleur_coin(liste, publics=False):
+    """Score du meilleur secteur à moins de ZONE["rayon_km"] du centre : le chiffre que la page affiche pour le
+    coin n° 1 « autour de moi » avec le même rayon."""
+    r = math.radians
+    for lat, lon, score, st in liste:                 # liste triée du meilleur au moins bon
+        if publics and not st:
+            continue
+        h = (math.sin(r(lat - ZONE["lat"]) / 2) ** 2
+             + math.cos(r(lat)) * math.cos(r(ZONE["lat"])) * math.sin(r(lon - ZONE["lon"]) / 2) ** 2)
+        if 12742 * math.asin(math.sqrt(h)) <= ZONE["rayon_km"]:
+            return score
+    return 0
+
+
 def niveau(ind_grille, potentiel, zone):
     """Indice des meilleurs secteurs d'une zone (90e centile parmi les carrés à bon potentiel)."""
     bons = zone & (potentiel >= 500)
@@ -404,7 +420,9 @@ def main():
 
     def publier(cle, nom_carte, carte, seuil):
         image(carte, merc, table, sortie / f"{cle}_{nom_carte}.png")
-        ecrire_json(sortie / f"secteurs_{cle}_{nom_carte}.json", secteurs(carte, seuil, publique))
+        liste = secteurs(carte, seuil, publique)
+        ecrire_json(sortie / f"secteurs_{cle}_{nom_carte}.json", liste)
+        return liste
 
     for espece, e in ESPECES.items():
         nom = e["nom"]
@@ -417,19 +435,21 @@ def main():
         publier(espece, "potentiel", potentiel, 400)
         if g:
             cumul[g]["potentiel"] = np.maximum(cumul[g].get("potentiel", 0), potentiel.astype("float32") * poids)
-        prev = {"zone": [], "region": [], "statut": []}
+        prev = {"zone": [], "zone_pub": [], "indice_zone": [], "region": [], "statut": []}
         for k, jour_k in enumerate(dates):
             ind_grille = indice_grille(espece, m, k, jour_k.month, geo)
             if k in humidite:          # réserve en eau du sol en profondeur, selon le sol de chaque carré
                 ind_grille = ind_grille * im.effet_sol(espece, humidite[k]).astype("float32")
             carte = potentiel.astype("float32") * ind_grille        # sur 1000
-            publier(espece, f"j{k}", carte, 120)
+            liste = publier(espece, f"j{k}", carte, 120)
+            prev["zone"].append(meilleur_coin(liste))
+            prev["zone_pub"].append(meilleur_coin(liste, publics=True))
             if g:
                 cumul[g][k] = np.maximum(cumul[g].get(k, 0), carte * poids)
             moy_r, p90_r = niveau(ind_grille, potentiel, masque)
             _, p90_z = niveau(ind_grille, potentiel, zone)
             f_saison = im.SAISON[espece].get(jour_k.month, 0)
-            prev["zone"].append(round(p90_z * 1000))
+            prev["indice_zone"].append(round(p90_z * 1000))
             prev["region"].append(round(p90_r * 1000))
             prev["statut"].append(statut(p90_r, f_saison))
             if k == 0:
@@ -451,11 +471,12 @@ def main():
         if not presents or "potentiel" not in cumul[g]:
             continue
         publier(g, "potentiel", cumul[g]["potentiel"], 400)
-        for k in range(len(dates)):
-            publier(g, f"j{k}", cumul[g][k], 120)
+        listes = [publier(g, f"j{k}", cumul[g][k], 120) for k in range(len(dates))]
         pond = lambda e, cle, k: previsions[e][cle][k] * def_g["poids"][e]
         previsions[g] = {
-            "zone": [round(max(pond(e, "zone", k) for e in presents)) for k in range(len(dates))],
+            "zone": [meilleur_coin(l) for l in listes],
+            "zone_pub": [meilleur_coin(l, publics=True) for l in listes],
+            "indice_zone": [round(max(pond(e, "indice_zone", k) for e in presents)) for k in range(len(dates))],
             "region": [round(max(pond(e, "region", k) for e in presents)) for k in range(len(dates))],
             "statut": [max((previsions[e]["statut"][k] for e in presents), key=ORDRE_STATUTS.index)
                        for k in range(len(dates))],

@@ -354,7 +354,7 @@ function afficherAvenir() {
   const dates = info.previsions.dates, maintenant = [], avenir = [];
   for (const [cle, p] of Object.entries(info.previsions.especes)) {
     if (info.groupes && info.groupes[cle]) continue;      // on annonce chaque cèpe, pas le groupe
-    const v = p.zone, max = Math.max(...v.slice(1)), k = v.indexOf(max, 1);
+    const v = p.indice_zone || p.zone, max = Math.max(...v.slice(1)), k = v.indexOf(max, 1);
     const nom = info.especes[cle] ? info.especes[cle].nom : cle;
     if (v[0] >= 300) maintenant.push({ cle, nom, force: v[0] });
     else if (max >= 300 && max - v[0] >= 150) {
@@ -379,14 +379,16 @@ function afficherJours() {
   if (mode !== "jour" || !p) { bloc.hidden = true; return; }
   const dates = info.previsions.dates;
   document.getElementById("jours").innerHTML = dates.map((d, k) => {
-    const v = p.zone[k];
+    const v = (filtrePublic() && p.zone_pub ? p.zone_pub : p.zone)[k];
     return `<button data-k="${k}" aria-pressed="${k === jourSel}" class="${k >= 4 ? "tendance" : ""}" title="${dateFr(d)} : ${v}/1000">` +
       `<span>${jourCourt(d, k)}</span><span class="colonne"><span style="height:${Math.max(4, v / 10)}%;background:${couleurValeur(v)}"></span></span>` +
       `<span class="val">${v}</span></button>`;
   }).join("");
   document.querySelectorAll("#jours button").forEach((b) => b.onclick = () => { jourSel = +b.dataset.k; afficher(); });
   document.getElementById("jours-legende").textContent =
-    `Chances de pousse dans les meilleurs coins ${info.previsions.zone.nom} (${info.previsions.zone.rayon_km} km), sur 1000. ` +
+    (p.zone_pub ? `Score du meilleur coin ${info.previsions.zone.nom} (${info.previsions.zone.rayon_km} km)${filtrePublic() ? ", en forêt publique" : ""}, sur 1000 : ` +
+      `le même chiffre que le coin n° 1 de la liste « Autour de moi » avec ce centre et ce rayon. `
+      : `Chances de pousse dans les meilleurs coins ${info.previsions.zone.nom} (${info.previsions.zone.rayon_km} km), sur 1000. `) +
     "Fiable sur 3 jours ; au-delà (cadres en pointillés), c'est une tendance.";
   bloc.hidden = false;
 }
@@ -779,6 +781,7 @@ casePubliques.onchange = () => {
   publiquesSeules = casePubliques.checked;
   try { localStorage.setItem("toads-acces", publiquesSeules ? "1" : "0"); } catch (e) {}
   afficherVoile();
+  afficherJours();
   afficherTop();
   chercherAutour(false);
 };
