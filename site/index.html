@@ -308,6 +308,10 @@ const FICHES = {
     milieu: "Sous les pins uniquement : pinèdes claires, jeunes plantations, lisières et bords de chemins herbeux", sol: "Plutôt calcaire ou neutre, aussi sur sable ; bien drainé",
     conseil: "Cherchez les pins, pas la forêt profonde : il pousse en troupes dans l'herbe et la mousse à leur pied. Son signe sûr : un lait orange carotte qui perle dès qu'on casse les lames.",
     attention: "Tout lactaire à lait blanc est à rejeter. Le lactaire à toison (toxique) pousse sous les bouleaux, avec un chapeau à bord laineux." },
+  bolet_bai: { latin: "Imleria badia (= Xerocomus badius)", periode: "août à novembre, surtout septembre-octobre",
+    milieu: "Épicéas et pins surtout, aussi hêtres ; dans la mousse, les myrtilles, au pied des vieilles souches", sol: "Acide (grès des Vosges)",
+    conseil: "Chapeau brun châtaigne, lisse, un peu visqueux par temps humide. Son signe sûr : le dessous jaune-verdâtre bleuit en quelques secondes quand on appuie dessus. Cueillez-le jeune et ferme.",
+    attention: "Un pied à gros réseau brun et une chair amère : c'est le bolet de fiel, immangeable. Un dessous rouge : ce n'est pas lui." },
   morille: { latin: "Morchella (M. esculenta, M. elata, M. vulgaris…)", periode: "mars à mai",
     milieu: "Forêts alluviales (frênes, ormes, peupliers), bords de rivières, vergers, lisières ; parfois copeaux de bois",
     sol: "Calcaire ou alluvions, plutôt riche",
@@ -492,6 +496,12 @@ const CLES = {
     ["Le champignon a poussé sous des pins ?", "Sous des bouleaux, c'est peut-être le lactaire à toison (toxique) ; sous des épicéas, le lactaire de l'épicéa, comestible mais moins bon."],
     ["Le bord du chapeau est nu, sans poils ni laine, et le chapeau orangé porte des cercles plus foncés ?", "Un bord laineux ou barbu est celui du lactaire à toison, toxique."],
     ["Le pied est orangé, court, creux avec l'âge, souvent marqué de petites fossettes plus foncées ?", "Sans ce pied orangé à fossettes, ce n'est pas le lactaire délicieux : faites vérifier."],
+  ],
+  bolet_bai: [
+    ["Sous le chapeau, une mousse de petits tubes jaune pâle à jaune-verdâtre (ni lames, ni dessous rose ou rouge) ?", "Un dessous rosé est celui du bolet de fiel (très amer) ; un dessous rouge ou orangé, celui de bolets toxiques."],
+    ["Quand on appuie le doigt sur ce dessous, il bleuit en quelques secondes ?", "Sans bleuissement, c'est un autre bolet : peut-être un cèpe (comestible) ou le bolet de fiel. Regardez le pied."],
+    ["Le pied est brun clair, assez mince, strié en long, sans réseau en relief ?", "Un gros réseau brun foncé en relief est celui du bolet de fiel ; un pied rouge, celui de bolets à rejeter."],
+    ["Un petit morceau de chair crue, mâché puis recraché, a un goût doux, pas amer ?", "Une chair amère est celle du bolet de fiel ou du bolet à beau pied : immangeables."],
   ],
   morille: [
     ["Coupée en deux dans la longueur, elle est entièrement creuse, d'une seule cavité du chapeau au pied ?", "Un intérieur cloisonné ou rempli : danger. Ce peut être un gyromitre, mortel."],

@@ -52,6 +52,9 @@ ARBRES = {
     # Lactaire délicieux (et lactaires sanguins) : uniquement sous les pins, jeunes plantations comprises
     "lactaire":         dict(pin=1, coniferes=.45, mixte=.35, lande=.2, foret_autre=.25, sapin_epicea=.1, douglas_meleze=.08,
                              chene=.04, hetre=.04, chataignier=.04, feuillus=.04, peuplier_robinier=.02),
+    # Bolet bai : résineux sur sol acide (épicéas, pins), aussi hêtraies ; souvent sur les vieilles souches moussues
+    "bolet_bai":        dict(sapin_epicea=1, pin=.9, coniferes=.9, mixte=.8, douglas_meleze=.5, hetre=.5, chataignier=.4,
+                             chene=.35, feuillus=.35, foret_autre=.4, lande=.1, peuplier_robinier=.05),
     # Morille : forêts alluviales (frênes, ormes, peupliers), feuillus frais, vergers et jardins, lisières
     "morille":          dict(chene=.6, hetre=.3, chataignier=.1, feuillus=1, mixte=.4, sapin_epicea=.15, pin=.2,
                              douglas_meleze=.1, coniferes=.1, peuplier_robinier=1, foret_autre=.6, lande=.1,
@@ -82,6 +85,7 @@ SOL_ALT = {
     "pied_de_mouton":   dict(ph=(5.2, 6.8), marge=0.8, alt=(100, 1300)),
     "russule":          dict(ph=(4.2, 6.6), marge=1.0, alt=(100, 1100)),
     "lactaire":         dict(ph=(4.8, 8.2), marge=1.2, alt=(100, 1100)),
+    "bolet_bai":        dict(ph=(3.5, 5.5), marge=1.0, alt=(150, 1300)),
     "morille":          dict(ph=(6.2, 8.5), marge=1.0, alt=(100, 500)),
 }
 
@@ -90,7 +94,7 @@ THERMOPHILE = {"cepe_ete": .25, "cepe_bronze": .5}
 # Hauteur moyenne des arbres (m) à partir de laquelle le peuplement convient pleinement.
 # En dessous de 3 m (coupe rase, jeune plantation), il ne reste presque rien pour les espèces liées aux arbres.
 HAUTEUR_PLEINE = {"cepe_bordeaux": 10, "cepe_ete": 12, "cepe_bronze": 12, "cepe_pins": 10, "girolle": 10,
-                  "trompette": 15, "chanterelle_tube": 12, "pied_de_mouton": 12, "russule": 15, "lactaire": 8}
+                  "trompette": 15, "chanterelle_tube": 12, "pied_de_mouton": 12, "russule": 15, "lactaire": 8, "bolet_bai": 12}
 
 VARIABLES_RELIEF = ["altitude", "pente", "nordicite", "tpi", "tpi_large", "ph"]
 MIN_OBS = 25                # carrés observés : en dessous, pas de modèle, les règles seules

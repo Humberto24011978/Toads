@@ -42,6 +42,8 @@ PARAMS = {
     "russule":          dict(delai=(5, 18), marge_delai=7, tsol=(11, 19), marge_t=4, tsol_actuel=6, gel=.3),
     # Lactaire délicieux : automne, après les pluies, par temps frais ; craint les vraies gelées
     "lactaire":         dict(delai=(6, 18), marge_delai=7, tsol=(8, 16), marge_t=4, tsol_actuel=4, gel=.4),
+    # Bolet bai : fin d'été et automne, par temps frais et humide ; tient jusqu'aux gelées
+    "bolet_bai":        dict(delai=(6, 20), marge_delai=8, tsol=(7, 15), marge_t=4, tsol_actuel=3, gel=.4),
     # Morille : au printemps, quand le sol se réchauffe vers 8 à 12 °C après des pluies ; les gelées tardives la freinent
     "morille":          dict(delai=(5, 18), marge_delai=7, tsol=(7, 13), marge_t=3, tsol_actuel=5, gel=.5),
 }
@@ -62,11 +64,12 @@ SAISON = {
     "pied_de_mouton":   {7: .4, 8: .8, 9: 1, 10: 1, 11: 1, 12: .8, 1: .3},
     "russule":          {6: .5, 7: 1, 8: 1, 9: 1, 10: .9, 11: .4},
     "lactaire":         {7: .2, 8: .6, 9: .9, 10: 1, 11: .8, 12: .2},
+    "bolet_bai":        {7: .2, 8: .7, 9: 1, 10: 1, 11: .8, 12: .2},
     "morille":          {2: .1, 3: .6, 4: 1, 5: .8, 6: .15},
 }
 
 # Réserve en eau du sol : part minimale gardée quand le sol est sec en profondeur (0 = effet maximal)
-PLANCHER_SOL = {"cepe_bordeaux": .3, "cepe_ete": .3, "cepe_bronze": .3, "cepe_pins": .3, "girolle": .3, "trompette": .35, "chanterelle_tube": .35, "pied_de_mouton": .35, "russule": .3, "lactaire": .3, "morille": .4,
+PLANCHER_SOL = {"cepe_bordeaux": .3, "cepe_ete": .3, "cepe_bronze": .3, "cepe_pins": .3, "girolle": .3, "trompette": .35, "chanterelle_tube": .35, "pied_de_mouton": .35, "russule": .3, "lactaire": .3, "bolet_bai": .3, "morille": .4,
                 "coulemelle": .5, "rose_des_pres": .6, "coprin": .65}
 RESERVE_UTILE = 100.0      # mm d'eau utilisables par les racines et le mycélium (sol forestier moyen)
 CLASSES_RU = [30, 50, 75, 100, 140, 200]   # mm : le bilan est calculé pour chaque classe de sol

@@ -46,6 +46,7 @@ ESPECES = {
     "pied_de_mouton": {"nom": "Pied de mouton", "latin": ["Hydnum repandum", "Hydnum rufescens"]},
     "russule": {"nom": "Russule charbonnière", "latin": ["Russula cyanoxantha"]},
     "lactaire": {"nom": "Lactaire délicieux", "latin": ["Lactarius deliciosus", "Lactarius sanguifluus", "Lactarius semisanguifluus"]},
+    "bolet_bai": {"nom": "Bolet bai", "latin": ["Imleria badia"]},
     "morille": {"nom": "Morille", "latin": ["Morchella"]},      # tout le genre (morilles et morillon)
 }
 
