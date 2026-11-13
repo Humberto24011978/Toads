@@ -2,38 +2,38 @@
  "cepe_bordeaux": {
   "observations": 572,
   "observations_region": 108,
-  "auc": 0.66,
-  "poids_modele": 0.64,
+  "auc": 0.658,
+  "poids_modele": 0.63,
   "variables_cles": [
    "ph_edc",
    "altitude",
    "sapin",
    "tpi_large",
    "nordicite",
-   "pente"
+   "sable"
   ],
-  "part_favorable": 16.1
+  "part_favorable": 16.2
  },
  "cepe_ete": {
   "observations": 173,
   "observations_region": 26,
-  "auc": 0.642,
-  "poids_modele": 0.57,
+  "auc": 0.618,
+  "poids_modele": 0.47,
   "variables_cles": [
    "altitude",
-   "twi",
    "ph_edc",
    "pin_sylvestre",
-   "sable",
-   "nordicite"
+   "nordicite",
+   "twi",
+   "sable"
   ],
-  "part_favorable": 12.4
+  "part_favorable": 13.9
  },
  "cepe_bronze": {
   "observations": 35,
   "observations_region": 11,
-  "auc": 0.682,
-  "poids_modele": 0.35,
+  "auc": 0.663,
+  "poids_modele": 0.32,
   "variables_cles": [
    "sable",
    "pin_sylvestre",
@@ -42,73 +42,73 @@
    "sapin",
    "altitude"
   ],
-  "part_favorable": 4.2
+  "part_favorable": 4.3
  },
  "cepe_pins": {
   "observations": 33,
   "observations_region": 3,
-  "auc": 0.656,
-  "poids_modele": 0.29,
+  "auc": 0.692,
+  "poids_modele": 0.36,
   "variables_cles": [
-   "altitude",
    "pin_sylvestre",
    "sable",
+   "altitude",
    "epicea",
    "ph_edc",
-   "lc_coniferes"
+   "chene_p"
   ],
-  "part_favorable": 8.5
+  "part_favorable": 8.2
  },
  "girolle": {
   "observations": 464,
   "observations_region": 63,
-  "auc": 0.722,
+  "auc": 0.718,
   "poids_modele": 0.8,
   "variables_cles": [
    "sable",
-   "altitude",
    "ph_edc",
+   "altitude",
    "sapin",
    "epicea",
    "tpi_large"
   ],
-  "part_favorable": 13.6
+  "part_favorable": 13.7
  },
  "trompette": {
   "observations": 107,
   "observations_region": 24,
-  "auc": 0.573,
-  "poids_modele": 0.25,
+  "auc": 0.58,
+  "poids_modele": 0.27,
   "variables_cles": [
    "chataignier_p",
    "altitude",
    "tpi_large",
+   "pente",
    "nordicite",
-   "lc_feuillus",
-   "pente"
+   "lc_feuillus"
   ],
-  "part_favorable": 12.0
+  "part_favorable": 11.7
  },
  "chanterelle_tube": {
   "observations": 95,
   "observations_region": 37,
-  "auc": 0.629,
-  "poids_modele": 0.41,
+  "auc": 0.643,
+  "poids_modele": 0.45,
   "variables_cles": [
    "ph",
-   "altitude",
    "sable",
+   "altitude",
    "pin_sylvestre",
    "sapin",
    "lc_coniferes"
   ],
-  "part_favorable": 9.6
+  "part_favorable": 9.3
  },
  "coulemelle": {
   "observations": 657,
   "observations_region": 132,
-  "auc": 0.635,
-  "poids_modele": 0.54,
+  "auc": 0.64,
+  "poids_modele": 0.56,
   "variables_cles": [
    "sable",
    "altitude",
@@ -117,28 +117,28 @@
    "tpi_large",
    "pente"
   ],
-  "part_favorable": 6.4
+  "part_favorable": 6.1
  },
  "rose_des_pres": {
   "observations": 102,
   "observations_region": 9,
-  "auc": 0.688,
-  "poids_modele": 0.62,
+  "auc": 0.669,
+  "poids_modele": 0.56,
   "variables_cles": [
    "hetre_p",
    "ph",
    "sable",
-   "chene_p",
    "altitude",
-   "nordicite"
+   "nordicite",
+   "chene_p"
   ],
-  "part_favorable": 12.6
+  "part_favorable": 13.8
  },
  "coprin": {
-  "observations": 974,
+  "observations": 977,
   "observations_region": 139,
-  "auc": 0.629,
-  "poids_modele": 0.52,
+  "auc": 0.622,
+  "poids_modele": 0.49,
   "variables_cles": [
    "pente",
    "twi",
@@ -147,13 +147,13 @@
    "tpi_large",
    "sable"
   ],
-  "part_favorable": 13.7
+  "part_favorable": 14.8
  },
  "pied_de_mouton": {
   "observations": 200,
   "observations_region": 43,
-  "auc": 0.596,
-  "poids_modele": 0.39,
+  "auc": 0.617,
+  "poids_modele": 0.47,
   "variables_cles": [
    "tpi_large",
    "altitude",
@@ -162,28 +162,28 @@
    "tpi",
    "nordicite"
   ],
-  "part_favorable": 25.4
+  "part_favorable": 23.1
  },
  "russule": {
   "observations": 189,
   "observations_region": 32,
-  "auc": 0.617,
-  "poids_modele": 0.47,
+  "auc": 0.598,
+  "poids_modele": 0.39,
   "variables_cles": [
    "altitude",
    "tpi",
    "nordicite",
    "tpi_large",
-   "pente",
-   "ph_edc"
+   "ph_edc",
+   "pente"
   ],
-  "part_favorable": 14.9
+  "part_favorable": 16.3
  },
  "lactaire": {
   "observations": 182,
   "observations_region": 12,
-  "auc": 0.704,
-  "poids_modele": 0.8,
+  "auc": 0.696,
+  "poids_modele": 0.78,
   "variables_cles": [
    "sable",
    "lc_coniferes",
@@ -197,30 +197,30 @@
  "bolet_bai": {
   "observations": 362,
   "observations_region": 53,
-  "auc": 0.679,
-  "poids_modele": 0.72,
+  "auc": 0.676,
+  "poids_modele": 0.71,
   "variables_cles": [
    "lc_coniferes",
    "ph_edc",
    "altitude",
    "nordicite",
-   "lc_feuillus",
-   "pin_sylvestre"
+   "pin_sylvestre",
+   "tpi_large"
   ],
   "part_favorable": 8.4
  },
  "morille": {
   "observations": 101,
   "observations_region": 20,
-  "auc": 0.709,
-  "poids_modele": 0.66,
+  "auc": 0.697,
+  "poids_modele": 0.65,
   "variables_cles": [
    "ph_edc",
    "sapin",
    "sable",
-   "lc_prairie",
    "altitude",
-   "ph"
+   "lc_prairie",
+   "pente"
   ],
   "part_favorable": 4.5
  }
