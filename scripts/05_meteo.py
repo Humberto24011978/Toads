@@ -37,6 +37,7 @@ PAS_METEO = (0.15, 0.12)  # degrés (lon, lat) : environ 11 x 13 km
 JOURS_PASSES = 30
 JOURS_PREVUS = 7                 # prévisions : aujourd'hui + 7 jours
 # Zone surveillée pour les prévisions (centre, rayon)
+RAYON_TERRE = 6378137          # sphère de la projection Web Mercator
 ZONE = {"nom": "autour de Marlenheim", "lat": 48.621, "lon": 7.491, "rayon_km": 40}
 # Baisse de température avec l'altitude (°C par mètre)
 GRADIENT_AIR, GRADIENT_SOL = 0.0065, 0.0055
@@ -262,41 +263,44 @@ def voile(prive, merc, chemin):
     img.save(chemin, transparency=bytes([0, 215]))
 
 
-def secteurs(grille, seuil, statut=None, rayon=6):
-    """Meilleurs secteurs d'une carte : le meilleur carré de 100 m de chaque voisinage de ~1,2 km.
+def secteurs(grille, seuil, statut, merc, rayon=6):
+    """Meilleurs secteurs d'une carte : le meilleur pixel de chaque voisinage de ~1,2 km, pris sur l'image publiée.
 
-    Le score publié est celui du carré lui-même, arrondi comme sur l'image (tranches de 4 points) : toucher la
-    carte à cet endroit donne le même chiffre, et aucun carré à moins de 600 m n'en a un plus élevé.
+    On travaille sur les pixels de l'image elle-même (un pixel = le score d'un carré de 100 m, par tranches de
+    4 points) : toucher la carte à l'endroit indiqué redonne exactement ce score, et aucun pixel à moins de
+    600 m n'en a un plus élevé.
 
     Renvoie [[lat, lon, score, statut], ...] du meilleur au moins bon ; statut : 0 forêt privée ou statut
     inconnu, 1 forêt domaniale, 2 autre forêt publique.
     """
-    lisse = np.minimum(np.ceil(grille.astype("float32") / PAS_COULEUR) * PAS_COULEUR, MAX)
-    lig, col = np.nonzero(lisse >= seuil)
-    ordre = np.argsort(-lisse[lig, col], kind="stable")
-    pris = np.zeros(lisse.shape, dtype=bool)
+    dedans, indices, m = merc["dedans"], merc["indices"], merc["mercator"]
+    v = np.zeros(indices.shape, dtype="float32")
+    v[dedans] = grille.ravel()[indices[dedans]]
+    v = np.minimum(np.ceil(v / PAS_COULEUR) * PAS_COULEUR, MAX)
+    lig, col = np.nonzero(v >= seuil)
+    ordre = np.argsort(-v[lig, col], kind="stable")
+    pris = np.zeros(v.shape, dtype=bool)
     choisis = []
     for i in ordre:
         li, c = lig[i], col[i]
         if pris[li, c]:
             continue
+        zone = (slice(max(li - rayon, 0), li + rayon + 1), slice(max(c - rayon, 0), c + rayon + 1))
+        if v[zone].max() > v[li, c]:        # un pixel voisin fait mieux : il appartient à un meilleur secteur
+            continue
         choisis.append(i)
-        pris[max(li - rayon, 0):li + rayon + 1, max(c - rayon, 0):c + rayon + 1] = True
+        pris[zone] = True
     choisis = np.array(choisis, dtype=int)
     if len(choisis) == 0:
         return []
-    x = X0 + (col[choisis] + 0.5) * PAS
-    y = Y1 - (lig[choisis] + 0.5) * PAS
-    lon, lat = Transformer.from_crs(CRS, 4326, always_xy=True).transform(x, y)
-    valeurs = lisse[lig[choisis], col[choisis]]
-    st = statut[lig[choisis], col[choisis]] if statut is not None else np.zeros(len(choisis), int)
-    return [[round(float(a), 4), round(float(o), 4), int(round(float(v))), int(s)]
-            for a, o, v, s in zip(lat, lon, valeurs, st)]
-
-
-PHASES = [("Nouvelle lune", "🌑"), ("Premier croissant", "🌒"), ("Premier quartier", "🌓"),
-          ("Gibbeuse croissante", "🌔"), ("Pleine lune", "🌕"), ("Gibbeuse décroissante", "🌖"),
-          ("Dernier quartier", "🌗"), ("Dernier croissant", "🌘")]
+    li, c = lig[choisis], col[choisis]
+    x = m["gauche"] + (c + 0.5) * m["pas"]
+    y = m["haut"] - (li + 0.5) * m["pas"]
+    lon = np.degrees(x / RAYON_TERRE)
+    lat = np.degrees(2 * np.arctan(np.exp(y / RAYON_TERRE)) - np.pi / 2)
+    st = statut.ravel()[indices[li, c]] if statut is not None else np.zeros(len(choisis), int)
+    return [[round(float(a), 5), round(float(o), 5), int(val), int(e)]
+            for a, o, val, e in zip(lat, lon, v[li, c], st)]
 
 
 def lune(jour):
@@ -423,7 +427,7 @@ def main():
 
     def publier(cle, nom_carte, carte, seuil):
         image(carte, merc, table, sortie / f"{cle}_{nom_carte}.png")
-        liste = secteurs(carte, seuil, publique)
+        liste = secteurs(carte, seuil, publique, merc)
         ecrire_json(sortie / f"secteurs_{cle}_{nom_carte}.json", liste)
         return liste
 
