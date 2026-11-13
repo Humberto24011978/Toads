@@ -225,11 +225,11 @@ def table_couleurs():
     table = [[0, 0, 0, 0]] + [couleur(min(i * PAS_COULEUR, MAX)) if i * PAS_COULEUR >= SEUIL else [0, 0, 0, 0]
                               for i in range(1, MAX // PAS_COULEUR + 1)]
     # La page relit le score d'un pixel à sa couleur. L'opacité, que le navigateur restitue exactement, porte le
-    # numéro de la tranche modulo 4 (écart invisible) : deux tranches de même opacité ont des couleurs bien distinctes.
+    # numéro de la tranche modulo 8 (écart à peine visible) : deux tranches de même opacité ont des couleurs bien distinctes.
     for i, c in enumerate(table):
         if c[3]:
             c[:] = [int(x) for x in c]
-            c[3] -= (c[3] - i) % 4
+            c[3] -= (c[3] - i) % 8
     return table
 
 
