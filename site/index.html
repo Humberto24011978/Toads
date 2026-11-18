@@ -114,7 +114,14 @@
   .fiche .attention { background: #fbeee4; border-left: 3px solid var(--accent); padding: 7px 10px; border-radius: 6px; font-size: 12.5px; }
   .pied { font-size: 11.5px; color: var(--gris); line-height: 1.45; margin-top: 12px; }
   .pied a { color: var(--mousse); }
-  .localiser { position: fixed; z-index: 1000; right: 16px; bottom: 28px; background: #fff; border: 0; border-radius: 999px; padding: 10px 14px; font-size: 14px; box-shadow: 0 3px 12px rgba(0,0,0,.2); cursor: pointer; }
+  .gps { position: fixed; z-index: 1000; right: 16px; bottom: 28px; display: flex; gap: 8px; }
+  .localiser { background: #fff; border: 0; border-radius: 999px; padding: 10px 14px; font-size: 14px; box-shadow: 0 3px 12px rgba(0,0,0,.2); cursor: pointer; color: var(--encre); white-space: nowrap; }
+  .localiser.actif { background: var(--foret); color: #fff; }
+  .suivi-info { position: fixed; z-index: 1000; right: 16px; bottom: 80px; max-width: min(420px, 92vw); background: rgba(31,58,43,.94); color: #fff;
+    border-radius: 12px; padding: 8px 12px; font-size: 13.5px; line-height: 1.4; box-shadow: 0 3px 12px rgba(0,0,0,.3); pointer-events: none; }
+  .suivi-info small { opacity: .85; font-size: 12px; }
+  .coin { display: flex; align-items: center; justify-content: center; }
+  .coin span.pastille { width: auto; min-width: 34px; height: 24px; padding: 0 6px; border-radius: 12px; font-size: 12.5px; }
   .leaflet-control-layers { border-radius: 10px !important; }
   .avenir { background: #fff7e8; border: 1px solid #f0d9a8; border-radius: 12px; padding: 10px 12px; margin-bottom: 14px; }
   .avenir h3 { margin: 0 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: .5px; color: #8a5a12; }
@@ -153,7 +160,8 @@
     .tete { border-radius: 16px 16px 0 0; padding-top: 12px; }
     .tete .plier { display: inline-block; }
     .panneau.plie .corps { display: none; }
-    .localiser { bottom: auto; top: 12px; right: auto; left: 12px; }
+    .gps { bottom: auto; top: 12px; right: auto; left: 12px; }
+    .suivi-info { right: auto; bottom: auto; left: 12px; top: 60px; max-width: calc(100vw - 84px); }
   }
 </style>
 </head>
@@ -247,7 +255,12 @@
   </div>
 </section>
 
-<button class="localiser" id="localiser">📍 Me localiser</button>
+<div class="gps">
+  <button class="localiser" id="localiser">📍 Me localiser</button>
+  <button class="localiser" id="suivre" aria-pressed="false" title="Suivre ma position en marchant : les meilleurs coins à moins de 5 km, avec leur score">🚶 Suivre</button>
+  <button class="localiser" id="recentrer" hidden>⌖ Recentrer</button>
+</div>
+<div class="suivi-info" id="suivi-info" hidden aria-live="polite"></div>
 <div class="bandeau" id="bandeau" hidden><span>Touchez la carte à l'endroit exact</span><button id="bandeau-annuler">Annuler</button></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -646,7 +659,9 @@ const NB_COINS = 10;
 const DIRECTIONS = ["au nord", "au nord-est", "à l'est", "au sud-est", "au sud", "au sud-ouest", "à l'ouest", "au nord-ouest"];
 const secteursCharges = {};
 const groupeCoins = L.layerGroup().addTo(carte);
-let centre = null, marqueurMoi = null, cercle = null, rayon = 15, marqueurs = [];
+let centre = null, marqueurMoi = null, cercle = null, rayon = 15, marqueurs = [], coinsAutour = [];
+// Suivi de position en marchant (voir plus bas) : null quand il est arrêté
+let suiviId = null, suiviCentre = true, rayonAvantSuivi = null, cercleGps = null, dernierPoint = null, dernierePosition = null;
 try { rayon = Math.min(100, Math.max(1, +localStorage.getItem("toads-rayon") || 15)); } catch (e) {}
 const curseur = document.getElementById("rayon"), texteRayon = document.getElementById("rayon-txt");
 curseur.value = rayon; texteRayon.textContent = rayon + " km";
@@ -788,12 +803,17 @@ async function chercherAutour(ajuster) {
   }
   proches.sort((a, b) => b.s - a.s || a.d - b.d);
   const meilleurs = proches.slice(0, NB_COINS);
+  coinsAutour = meilleurs;
 
   groupeCoins.clearLayers();
+  // En suivi, chaque coin affiche son score ; sinon son rang dans la liste
+  const enSuivi = suiviId !== null;
   marqueurs = meilleurs.map((c, i) => {
     const lien = `https://www.google.com/maps/dir/?api=1&destination=${c.lat},${c.lng}`;
-    return L.marker([c.lat, c.lng], { zIndexOffset: 500 - i,
-      icon: L.divIcon({ className: "coin", html: `<span style="background:${couleurScore(c.s)}">${i + 1}</span>`, iconSize: [30, 30], iconAnchor: [15, 15] }) })
+    const icone = enSuivi
+      ? L.divIcon({ className: "coin", html: `<span class="pastille" style="background:${couleurScore(c.s)}">${c.s}</span>`, iconSize: [56, 28], iconAnchor: [28, 14] })
+      : L.divIcon({ className: "coin", html: `<span style="background:${couleurScore(c.s)}">${i + 1}</span>`, iconSize: [30, 30], iconAnchor: [15, 15] });
+    return L.marker([c.lat, c.lng], { zIndexOffset: 500 - i, icon: icone })
       .bindPopup(`<b>Coin n° ${i + 1}</b> · score ${c.s}/1000<br>${km(c.d)} ${direction(centre, c)}` +
         (info.acces ? `<br>${STATUTS_FORET[c.st]}` : "") + `<br><a href="${lien}" target="_blank" rel="noopener">Itinéraire</a>`)
       .addTo(groupeCoins);
@@ -808,8 +828,10 @@ async function chercherAutour(ajuster) {
     else if (mode === "jour") msg = `Aucun coin favorable ${jourSel === 0 ? "aujourd'hui" : "ce jour-là"} pour : ${nom}, dans ce rayon. Agrandissez le rayon, choisissez un autre jour ou passez en mode « Potentiel ».`;
     else msg = `Aucun coin favorable pour : ${nom}, dans ce rayon. Agrandissez le rayon.`;
     zone.innerHTML = `<p class="aide">${msg}</p>`;
+    majInfoSuivi();
     return;
   }
+  majInfoSuivi();
   zone.innerHTML = `<ol>${meilleurs.map((c, i) => `<li><button data-i="${i}"><span class="num" style="background:${couleurScore(c.s)}">${i + 1}</span>` +
     `<span>Score ${c.s} <span class="km">· ${km(c.d)} ${direction(centre, c)}</span>` +
     (info.acces ? `<span class="statut-coin">${STATUTS_FORET[c.st]}</span>` : "") + `</span></button></li>`).join("")}</ol>`;
@@ -846,7 +868,8 @@ casePubliques.onchange = () => {
 
 curseur.addEventListener("input", () => {
   rayon = +curseur.value; texteRayon.textContent = rayon + " km";
-  try { localStorage.setItem("toads-rayon", rayon); } catch (e) {}
+  // En suivi, le rayon choisi ne vaut que pour la balade : on ne le mémorise pas
+  if (suiviId === null) try { localStorage.setItem("toads-rayon", rayon); } catch (e) {}
   chercherAutour(false);
 });
 curseur.addEventListener("change", () => { if (cercle) carte.fitBounds(cercle.getBounds(), { padding: [24, 24] }); });
@@ -1131,7 +1154,109 @@ carte.on("locationerror", () => {
   placerCentre(centre || carte.getCenter(), !centre).then(() => document.getElementById("resultats").insertAdjacentHTML("afterbegin",
     `<p class="aide" style="margin-bottom:8px">Position introuvable : vérifiez que la localisation est autorisée. En attendant, déplacez le point bleu à l'endroit voulu.</p>`));
 });
-carte.on("contextmenu", (ev) => placerCentre(ev.latlng, !centre));
+carte.on("contextmenu", (ev) => { arreterSuivi(); placerCentre(ev.latlng, !centre); });
+
+// ---- Suivi de position en marchant ----
+// La carte reste centrée sur vous, la recherche se limite à 5 km et se refait tous les 100 m ;
+// chaque coin affiche son score. Si vous déplacez la carte à la main, elle cesse de vous suivre
+// jusqu'à « Recentrer ». Le navigateur ne suit la position que page ouverte et écran allumé.
+const RAYON_SUIVI = 5, PAS_RECHERCHE_KM = 0.1;
+const boutonSuivre = document.getElementById("suivre"), boutonRecentrer = document.getElementById("recentrer");
+const boutonLocaliser = document.getElementById("localiser"), infoSuivi = document.getElementById("suivi-info");
+
+function majBoutonsSuivi() {
+  const actif = suiviId !== null;
+  boutonSuivre.textContent = actif ? "⏹ Arrêter" : "🚶 Suivre";
+  boutonSuivre.classList.toggle("actif", actif);
+  boutonSuivre.setAttribute("aria-pressed", actif);
+  boutonLocaliser.hidden = actif;
+  boutonRecentrer.hidden = !actif || suiviCentre;
+  infoSuivi.hidden = !actif;
+}
+function majInfoSuivi() {
+  if (suiviId === null || !dernierePosition) return;
+  const { ll, prec } = dernierePosition, m = coinsAutour[0];
+  let t;
+  if (!m) t = `Aucun coin favorable à moins de ${rayon} km`;
+  else {
+    const d = distanceKm(ll, m);
+    t = d < 0.05 ? `Vous êtes sur le meilleur coin : <b>${m.s}</b>`
+      : `Meilleur coin à moins de ${rayon} km : <b>${m.s}</b>, ${km(d)} ${direction(ll, m)}`;
+  }
+  if (prec > 30) t += `<br><small>Position à ± ${km(prec / 1000)}${prec > 300 ? " : signal faible, attendez un peu" : ""}</small>`;
+  infoSuivi.innerHTML = "🍄 " + t;
+}
+function surveillerPosition() {
+  return navigator.geolocation.watchPosition(positionSuivie, erreurSuivi, { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 });
+}
+function demarrerSuivi() {
+  if (!navigator.geolocation) {
+    document.getElementById("resultats").innerHTML = `<p class="aide">Ce navigateur ne sait pas suivre votre position.</p>`;
+    return;
+  }
+  rayonAvantSuivi = rayon;
+  rayon = RAYON_SUIVI; curseur.value = rayon; texteRayon.textContent = rayon + " km";
+  suiviCentre = true; dernierPoint = null; dernierePosition = null;
+  infoSuivi.innerHTML = "🍄 Recherche de votre position…";
+  suiviId = surveillerPosition();
+  if (marqueurMoi && marqueurMoi.dragging) marqueurMoi.dragging.disable();
+  if (window.innerWidth <= 640 && !document.getElementById("panneau").classList.contains("plie")) document.getElementById("plier").click();
+  majBoutonsSuivi();
+}
+function arreterSuivi() {
+  if (suiviId === null) return;
+  navigator.geolocation.clearWatch(suiviId);
+  suiviId = null;
+  if (cercleGps) { carte.removeLayer(cercleGps); cercleGps = null; }
+  if (marqueurMoi && marqueurMoi.dragging) marqueurMoi.dragging.enable();
+  if (rayonAvantSuivi !== null) {
+    rayon = rayonAvantSuivi; rayonAvantSuivi = null;
+    curseur.value = rayon; texteRayon.textContent = rayon + " km";
+  }
+  majBoutonsSuivi();
+  chercherAutour(false);                      // les coins reprennent leur numéro
+}
+function positionSuivie(pos) {
+  if (suiviId === null) return;
+  const ll = L.latLng(pos.coords.latitude, pos.coords.longitude), prec = Math.round(pos.coords.accuracy || 0);
+  const premier = !dernierPoint;
+  dernierePosition = { ll, prec };
+  // Cercle bleu clair : la précision de la position (souvent moins bonne sous les arbres)
+  if (!cercleGps) cercleGps = L.circle(ll, { radius: prec, color: "#2a6fdb", weight: 1, fillColor: "#2a6fdb", fillOpacity: .1, interactive: false }).addTo(carte);
+  else { cercleGps.setLatLng(ll); cercleGps.setRadius(prec); }
+  if (premier || distanceKm(dernierPoint, ll) >= PAS_RECHERCHE_KM) {
+    dernierPoint = ll;
+    placerCentre(ll, premier);                // nouvelle recherche des coins autour de vous
+    if (marqueurMoi && marqueurMoi.dragging) marqueurMoi.dragging.disable();
+  } else {
+    centre = ll;
+    marqueurMoi.setLatLng(ll);
+    if (cercle) cercle.setLatLng(ll);
+    majInfoSuivi();
+  }
+  if (!premier && suiviCentre) carte.panTo(ll);
+}
+function erreurSuivi(e) {
+  if (e.code === 1) {                         // localisation refusée
+    arreterSuivi();
+    document.getElementById("resultats").innerHTML = `<p class="aide">Localisation refusée : autorisez-la pour ce site dans les réglages du navigateur, puis touchez à nouveau « Suivre ».</p>`;
+    return;
+  }
+  infoSuivi.innerHTML = "🍄 Signal GPS faible, nouvelle tentative…";   // le suivi continue
+}
+boutonSuivre.onclick = () => suiviId === null ? demarrerSuivi() : arreterSuivi();
+boutonRecentrer.onclick = () => {
+  suiviCentre = true;
+  majBoutonsSuivi();
+  if (dernierePosition) carte.panTo(dernierePosition.ll);
+};
+carte.on("dragstart", () => { if (suiviId !== null && suiviCentre) { suiviCentre = false; majBoutonsSuivi(); } });
+// Certains téléphones coupent le suivi quand l'écran s'éteint : on le relance au retour sur la page
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden || suiviId === null) return;
+  navigator.geolocation.clearWatch(suiviId);
+  suiviId = surveillerPosition();
+});
 
 fetch("cartes/info.json", { cache: "no-store" })
   .then((r) => r.json())
