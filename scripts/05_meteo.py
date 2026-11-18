@@ -366,6 +366,42 @@ def meilleur_coin(liste, publics=False):
     return 0
 
 
+def preferences_terrain(grilles, rel, foret, masque):
+    """Ce que la carte de potentiel fait de l'exposition et du relief, pour chaque espèce.
+
+    Rapport du potentiel moyen des versants sud francs à celui des versants nord francs, et des creux (vallons,
+    fonds) à celui des bosses et crêtes, à altitude et couvert comparables (tranches de 150 m, forêt ou non),
+    pour ne pas confondre avec l'altitude ou le milieu. Affiché quand on touche la carte.
+    """
+    pente = rel["pente"][masque] / 10.0
+    nord = rel["nordicite"][masque] / 100.0
+    attenue = np.clip(pente / 5, 0, 1)
+    cos_exp = np.where(attenue > 0.04, nord / np.maximum(attenue, 1e-6), 0)
+    # +1 : versant plein sud de 30° ou plus ; -1 : plein nord ; 0 : à plat ou tourné vers l'est ou l'ouest
+    soleil = np.clip(-cos_exp * np.sin(np.radians(pente)) / np.sin(np.radians(30)), -1, 1)
+    tpi = rel["tpi"][masque]
+    strate = (np.clip((rel["altitude"][masque].astype(int) - 100) // 150, 0, 9) * 2 + (foret[masque] > 50)).astype(int)
+    classes = {"sud_nord": (soleil > 0.5, soleil < -0.5), "creux_bosses": (tpi <= -8, tpi >= 8)}
+    sortie = {}
+    for cle, grille in grilles.items():
+        v = grille[masque].astype("float32")
+        ok = v > 0
+        res = {}
+        for nom, (a, b) in classes.items():
+            n_a = np.bincount(strate[ok & a], minlength=20)
+            n_b = np.bincount(strate[ok & b], minlength=20)
+            s_a = np.bincount(strate[ok & a], weights=v[ok & a], minlength=20)
+            s_b = np.bincount(strate[ok & b], weights=v[ok & b], minlength=20)
+            garde = (n_a > 300) & (n_b > 300) & (s_a > 0) & (s_b > 0)
+            if not garde.any():
+                continue
+            lr = np.log((s_a[garde] / n_a[garde]) / (s_b[garde] / n_b[garde]))
+            poids = np.minimum(n_a[garde], n_b[garde])
+            res[nom] = round(float(np.exp((lr * poids).sum() / poids.sum())), 2)
+        sortie[cle] = res
+    return sortie
+
+
 def niveau(ind_grille, potentiel, zone):
     """Indice des meilleurs secteurs d'une zone (90e centile parmi les carrés à bon potentiel)."""
     bons = zone & (potentiel >= 500)
@@ -402,9 +438,14 @@ def main():
         print("Pas encore de scores : lancez d'abord la préparation des données.")
         return
     scores = lire_bandes(DATA / "scores.tif")
-    masque = lire_bandes(DATA / "occupation.tif")["masque"] > 0
+    occupation = lire_bandes(DATA / "occupation.tif")
+    masque = occupation["masque"] > 0
     zone = masque_zone(masque)
-    altitude = lire_bandes(DATA / "relief_sol.tif")["altitude"].astype("float32")
+    relief = lire_bandes(DATA / "relief_sol.tif")
+    altitude = relief["altitude"].astype("float32")
+    foret = occupation["foret"]
+    terrain = preferences_terrain(scores, relief, foret, masque)
+    del occupation
     publique = lire_bandes(DATA / "acces.tif")["publique"] if (DATA / "acces.tif").exists() else None
     geo = preparer_geometrie(altitude)
     aujourdhui = dt.datetime.now(ZoneInfo("Europe/Paris")).date()
@@ -473,7 +514,8 @@ def main():
             prev["statut"].append(statut(p90_r, f_saison))
             if k == 0:
                 infos[espece] = {"nom": nom, "indice": round(moy_r * 1000), "indice_meilleur": round(p90_r * 1000),
-                                 "statut": statut(p90_r, f_saison), "saison": f_saison > 0}
+                                 "statut": statut(p90_r, f_saison), "saison": f_saison > 0,
+                                 "terrain": terrain.get(espece, {})}
                 if g:
                     infos[espece].update(groupe=g, court=e.get("court", nom))
                 for e2, (lc, cc), n in controles:
@@ -502,7 +544,8 @@ def main():
         }
         infos[g] = {"nom": def_g["nom"], "indice": max(infos[e]["indice"] for e in presents),
                     "indice_meilleur": max(infos[e]["indice_meilleur"] for e in presents),
-                    "statut": previsions[g]["statut"][0], "saison": any(infos[e]["saison"] for e in presents)}
+                    "statut": previsions[g]["statut"][0], "saison": any(infos[e]["saison"] for e in presents),
+                    "terrain": preferences_terrain({g: cumul[g]["potentiel"]}, relief, foret, masque).get(g, {})}
         groupes[g] = {"nom": def_g["nom"], "tous": def_g["tous"], "membres": presents}
         print(f"{def_g['nom']} (groupe) : aujourd'hui {infos[g]['statut']} ; {ZONE['nom']} {previsions[g]['zone']}")
 

@@ -997,6 +997,47 @@ const wfsIci = (couche, champs, ll) => {
     .then((r) => (r.ok ? r.json() : { features: [] })).then((j) => j.features.map((f) => f.properties)).catch(() => null);
 };
 const PROTECTIONS = /Réserve naturelle|Réserve biologique|Arrêté de protection|conservatoires d'espaces naturels/;
+// ---- Terrain du coin touché (altimétrie IGN) : pente et orientation à 100 m, creux ou bosse à 150-300 m ----
+// Mêmes repères que la carte : pente et orientation sur 200 m, position comparée aux alentours dans un rayon de 300 m.
+const ORIENTATIONS = ["nord", "nord-est", "est", "sud-est", "sud", "sud-ouest", "ouest", "nord-ouest"];
+function pointsTerrain(ll) {
+  const kx = 1 / (111320 * Math.cos(ll.lat * Math.PI / 180)), ky = 1 / 111320;
+  const pts = [[0, 0], [0, 100], [100, 0], [0, -100], [-100, 0]];        // centre, nord, est, sud, ouest (m)
+  for (const r of [150, 300]) for (let a = 0; a < 360; a += 45) pts.push([r * Math.sin(a * Math.PI / 180), r * Math.cos(a * Math.PI / 180)]);
+  return pts.map(([dx, dy]) => [ll.lng + dx * kx, ll.lat + dy * ky]);
+}
+function lireTerrain(z) {
+  if (!Array.isArray(z) || z.length < 21 || z.some((v) => !(v > -1000))) return null;
+  const dzEst = (z[2] - z[4]) / 200, dzNord = (z[1] - z[3]) / 200;
+  const pente = Math.atan(Math.hypot(dzEst, dzNord)) * 180 / Math.PI;
+  const expo = (Math.atan2(-dzEst, -dzNord) * 180 / Math.PI + 360) % 360;        // direction vers laquelle la pente descend
+  const anneau = z.slice(5), tpi = z[0] - anneau.reduce((a, b) => a + b, 0) / anneau.length;
+  // +1 = versant plein sud de 30° ou plus, -1 = plein nord (comme la carte)
+  const soleil = Math.max(-1, Math.min(1, -Math.cos(expo * Math.PI / 180) * Math.sin(pente * Math.PI / 180) / Math.sin(Math.PI / 6)));
+  return { alt: z[0], pente, expo, tpi, soleil };
+}
+const fois = (r) => "×" + r.toLocaleString("fr-FR", { maximumFractionDigits: 1, minimumFractionDigits: 1 });
+function texteTerrain(t) {
+  let h = t.pente < 3 ? "terrain presque plat" : `versant ${ORIENTATIONS[Math.round(t.expo / 45) % 8]}, pente ${Math.round(t.pente)}°`;
+  if (t.tpi <= -8) h += ", creux ou fond de vallon (garde mieux l'eau)";
+  else if (t.tpi >= 8) h += ", bosse ou crête (sèche plus vite)";
+  return h;
+}
+// Ce que la carte de potentiel fait de ce terrain pour l'espèce (rapports calculés chaque jour, à altitude et couvert égaux)
+function texteTerrainEspece(t, pref) {
+  if (!pref) return "";
+  const morceaux = [], net = (r) => r >= 1.15 || r <= 0.87;
+  const sn = pref.sud_nord, cb = pref.creux_bosses;
+  if (sn && Math.abs(t.soleil) > 0.5) {
+    if (!net(sn)) morceaux.push("versant sud ou nord, peu de différence");
+    else morceaux.push(t.soleil > 0 ? `versant sud ${fois(sn)} face à un versant nord` : `versant nord ${fois(1 / sn)} face à un versant sud`);
+  }
+  if (cb && Math.abs(t.tpi) >= 8) {
+    if (!net(cb)) morceaux.push("creux ou bosse, peu de différence");
+    else morceaux.push(t.tpi < 0 ? `creux ${fois(cb)} face à une bosse` : `bosse ${fois(1 / cb)} face à un creux`);
+  }
+  return morceaux.length ? `Déjà compté dans le potentiel pour cette espèce : ${morceaux.join(" ; ")}.` : "";
+}
 let iciJeton = 0;
 async function ouvrirIci(ll) {
   if (!info) return;
@@ -1004,7 +1045,8 @@ async function ouvrirIci(ll) {
   const k = mode === "jour" && p ? jourSel : 0;
   const quand = mode === "potentiel" ? null : (k === 0 ? "aujourd'hui" : "le " + dateFr(info.previsions.dates[k]));
   const texteScore = (v) => v == null ? "inconnu" : v === 0 ? `moins de ${info.couleurs ? info.couleurs.seuil : 80}/1000` : `environ <b>${v}</b>/1000`;
-  const etat = { jour: undefined, pot: undefined, foret: undefined, pub: undefined, prot: undefined, alt: undefined };
+  const etat = { jour: undefined, pot: undefined, foret: undefined, pub: undefined, prot: undefined, terrain: undefined };
+  const pref = (info.especes[espece] || {}).terrain;
   const lien = `https://www.google.com/maps/dir/?api=1&destination=${ll.lat.toFixed(5)},${ll.lng.toFixed(5)}`;
   const popup = L.popup({ maxWidth: 300 }).setLatLng(ll);
   const rendre = () => {
@@ -1012,6 +1054,11 @@ async function ouvrirIci(ll) {
     let h = `<div class="ici"><b>${sur(nom === "Cèpes" ? "Tous les cèpes" : nom)}</b><br>`;
     if (quand) h += `Chances ${quand} : ${etat.jour === undefined ? "…" : texteScore(etat.jour)}<br>`;
     h += `Potentiel du lieu : ${etat.pot === undefined ? "…" : texteScore(etat.pot)}<br>`;
+    // Part de la météo et de l'eau du sol : score du jour = potentiel x météo x sol (lus à 4 points près)
+    if (quand && etat.pot > 0 && etat.jour !== undefined && etat.jour !== null) {
+      const seuil = info.couleurs ? info.couleurs.seuil : 80;
+      h += `Météo et eau du sol ${quand} : ${etat.jour > 0 ? fois(Math.min(1, etat.jour / etat.pot)) : "moins de " + fois(seuil / etat.pot)} sur ce potentiel<br>`;
+    }
     if (etat.foret === undefined) h += `<span class="gris">Forêt : …</span><br>`;
     else if (etat.foret && etat.foret.length) h += `Peuplement : ${sur([...new Set(etat.foret.map((f) => f.tfv || f.essence))].join(" ; ").toLowerCase().replace(/[\u0080-\u009f\ufffd]/g, "'"))}<br>`;
     else if (etat.foret) h += `<span class="gris">Hors forêt d'après la carte forestière</span><br>`;
@@ -1019,7 +1066,11 @@ async function ouvrirIci(ll) {
     else if (etat.pub && etat.foret && etat.foret.length) h += `<span class="gris">Forêt privée ou statut non renseigné</span><br>`;
     const prot = (etat.prot || []).filter((f) => PROTECTIONS.test(f.nature || ""));
     if (prot.length) h += `<span style="color:#b3261e">⚠️ ${sur(prot.map((f) => f.nature + (f.toponyme ? " " + f.toponyme : "")).join(" ; "))} : cueillette interdite ou réglementée</span><br>`;
-    if (etat.alt != null) h += `Altitude : ${Math.round(etat.alt)} m<br>`;
+    if (etat.terrain) {
+      h += `Terrain : ${Math.round(etat.terrain.alt)} m, ${texteTerrain(etat.terrain)}<br>`;
+      const t2 = texteTerrainEspece(etat.terrain, pref);
+      if (t2) h += `<span class="gris">${t2}</span><br>`;
+    }
     h += `<div class="boutons"><a href="${lien}" target="_blank" rel="noopener">Itinéraire</a>` +
       `<button data-a="trouve">✅ J'en ai trouvé ici</button><button data-a="rien">❌ Rien trouvé ici</button>` +
       `<button data-a="autre">📝 Autre champignon ici</button></div></div>`;
@@ -1038,8 +1089,10 @@ async function ouvrirIci(ll) {
   wfsIci("LANDCOVER.FORESTINVENTORY.V2:formation_vegetale", "essence,tfv", ll).then((v) => { etat.foret = v; rendre(); });
   wfsIci("BDTOPO_V3:foret_publique", "nature,toponyme", ll).then((v) => { etat.pub = v; rendre(); });
   wfsIci("BDTOPO_V3:parc_ou_reserve", "nature,toponyme", ll).then((v) => { etat.prot = v; rendre(); });
-  fetch(`https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json?lon=${ll.lng.toFixed(5)}&lat=${ll.lat.toFixed(5)}&resource=ign_rge_alti_wld&zonly=true`)
-    .then((r) => r.json()).then((j) => { const z = j.elevations && j.elevations[0]; etat.alt = z > -1000 ? z : null; rendre(); }).catch(() => {});
+  const pts = pointsTerrain(ll);
+  fetch(`https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json?lon=${pts.map((p) => p[0].toFixed(6)).join("|")}` +
+    `&lat=${pts.map((p) => p[1].toFixed(6)).join("|")}&resource=ign_rge_alti_wld&zonly=true`)
+    .then((r) => r.json()).then((j) => { etat.terrain = lireTerrain(j.elevations); rendre(); }).catch(() => {});
 }
 carte.on("click", (ev) => { if (noteEnAttente) { const n = noteEnAttente; finAttente(); ajouterNote(ev.latlng, n); } else ouvrirIci(ev.latlng); });
 
