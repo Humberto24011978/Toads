@@ -688,14 +688,34 @@ function placerCentre(latlng, ajuster) {
   return chercherAutour(ajuster);
 }
 
-// ---- Les 3 meilleurs coins de toute la carte, aujourd'hui et demain ----
+// ---- Les 3 meilleurs coins du Bas-Rhin, aujourd'hui et demain ----
 const NB_TOP = 3, ECART_TOP_KM = 10, communes = {};
 const groupeTop = L.layerGroup().addTo(carte);
-let tourTop = 0;
+let tourTop = 0, contourTop = null;
+// Contour du Bas-Rhin (IGN, Admin Express, simplifié à 100 m), chargé une seule fois.
+// S'il manque, le classement se rabat sur toute la carte.
+function chargerContour() {
+  if (!contourTop) contourTop = fetch("bas-rhin.json").then((r) => r.json())
+    .then((f) => ({ bbox: f.bbox, anneaux: f.geometry.coordinates }))
+    .catch(() => { contourTop = null; return null; });
+  return contourTop;
+}
+// Le point est-il dans le contour ? (règle pair-impair, coordonnées [lon, lat])
+function dansContour(c, lat, lng) {
+  if (lng < c.bbox[0] || lng > c.bbox[2] || lat < c.bbox[1] || lat > c.bbox[3]) return false;
+  let dedans = false;
+  for (const a of c.anneaux)
+    for (let i = 0, j = a.length - 1; i < a.length; j = i++) {
+      const [xi, yi] = a[i], [xj, yj] = a[j];
+      if ((yi > lat) !== (yj > lat) && lng < (xj - xi) * (lat - yi) / (yj - yi) + xi) dedans = !dedans;
+    }
+  return dedans;
+}
 function nomCommune(lat, lon) {
   const cle = lat + "," + lon;
   if (!communes[cle]) communes[cle] = fetch(`https://geo.api.gouv.fr/communes?lat=${lat}&lon=${lon}&fields=nom,codeDepartement`)
-    .then((r) => r.json()).then((j) => j[0] ? `${j[0].nom} (${j[0].codeDepartement})` : "").catch(() => "");
+    .then((r) => r.json()).then((j) => !j[0] ? "" : j[0].codeDepartement === "67" ? j[0].nom : `${j[0].nom} (${j[0].codeDepartement})`)
+    .catch(() => "");
   return communes[cle];
 }
 function fichierSecteurs(nom) {
@@ -703,10 +723,11 @@ function fichierSecteurs(nom) {
     .catch(() => { delete secteursCharges[nom]; return []; });
   return secteursCharges[nom];
 }
-function meilleursCarte(liste) {
+function meilleursCarte(liste, contour) {
   const pris = [];
   for (const [lat, lng, sc, st] of liste) {          // la liste est déjà triée du meilleur au moins bon
     if (filtrePublic() && !(st > 0)) continue;
+    if (contour && !dansContour(contour, lat, lng)) continue;
     if (pris.some((c) => distanceKm(c, { lat, lng }) < ECART_TOP_KM)) continue;
     pris.push({ lat, lng, s: sc, st: st || 0 });
     if (pris.length === NB_TOP) break;
@@ -718,16 +739,17 @@ async function afficherTop() {
   groupeTop.clearLayers();
   if (!info || mode !== "jour") { zone.innerHTML = ""; return; }
   const esp = espece, jours = prevEspece(esp) ? [0, 1] : [0];
-  const listes = await Promise.all(jours.map((k) => fichierSecteurs(`${esp}_j${k}`)));
+  const [contour, ...listes] = await Promise.all([chargerContour(), ...jours.map((k) => fichierSecteurs(`${esp}_j${k}`))]);
   if (tour !== tourTop) return;
-  const tops = listes.map((l) => meilleursCarte(Array.isArray(l) ? l : []));
+  const tops = listes.map((l) => meilleursCarte(Array.isArray(l) ? l : [], contour));
   const titre = (k) => k === 0 ? "Aujourd'hui" : `Demain (${dateFr(info.previsions.dates[1])})`;
-  zone.innerHTML = `<label class="titre">Les 3 meilleurs coins de toute la carte</label>` + jours.map((k, n) =>
+  const dans = contour ? "dans le Bas-Rhin" : "de toute la carte";
+  zone.innerHTML = `<label class="titre">Les 3 meilleurs coins ${dans}</label>` + jours.map((k, n) =>
     `<div class="jour-top">${titre(k)}</div>` + (tops[n].length ? `<ol>${tops[n].map((c, i) =>
       `<li><button data-j="${n}" data-i="${i}"><span class="num" style="background:${couleurScore(c.s)}">${i + 1}</span>` +
       `<span>Score ${c.s} <span class="km" data-lieu="${n}-${i}"></span>` +
       (info.acces && !HORS_FORET.includes(esp) ? `<span class="statut-coin">${STATUTS_FORET[c.st]}</span>` : "") + `</span></button></li>`).join("")}</ol>`
-      : `<p class="aide">Aucun coin favorable sur la carte ${k === 0 ? "aujourd'hui" : "demain"}.</p>`)).join("") +
+      : `<p class="aide">Aucun coin favorable ${contour ? "dans le Bas-Rhin" : "sur la carte"} ${k === 0 ? "aujourd'hui" : "demain"}.</p>`)).join("") +
     (filtrePublic() ? `<p class="aide">En forêt publique seulement, à au moins ${ECART_TOP_KM} km les uns des autres.</p>` : "");
   tops.forEach((l, n) => l.forEach((c, i) => nomCommune(c.lat, c.lng).then((nom) => {
     const el = zone.querySelector(`[data-lieu="${n}-${i}"]`);
@@ -741,7 +763,7 @@ async function afficherTop() {
     const lien = `https://www.google.com/maps/dir/?api=1&destination=${c.lat},${c.lng}`;
     const m = L.marker([c.lat, c.lng], { zIndexOffset: 900,
       icon: L.divIcon({ className: "coin", html: `<span style="background:${couleurScore(c.s)}">★</span>`, iconSize: [30, 30], iconAnchor: [15, 15] }) })
-      .bindPopup(`<b>${titre(jours[n])} : coin n° ${+b.dataset.i + 1} de la carte</b><br>Score ${c.s}/1000${c.nom ? " · " + sur(c.nom) : ""}` +
+      .bindPopup(`<b>${titre(jours[n])} : coin n° ${+b.dataset.i + 1} ${contour ? "du Bas-Rhin" : "de la carte"}</b><br>Score ${c.s}/1000${c.nom ? " · " + sur(c.nom) : ""}` +
         (info.acces ? `<br>${STATUTS_FORET[c.st]}` : "") + `<br><a href="${lien}" target="_blank" rel="noopener">Itinéraire</a>`).addTo(groupeTop);
     if (window.innerWidth <= 640 && !document.getElementById("panneau").classList.contains("plie")) document.getElementById("plier").click();
     carte.setView(m.getLatLng(), Math.max(carte.getZoom(), 14));
