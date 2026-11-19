@@ -1270,10 +1270,23 @@ function nouveauCap(h, source) {
   if (source === "boussole") dernierCapBoussole = Date.now();
   demanderRendu();
 }
+// Android : direction vers laquelle « regarde » le téléphone, d'après son orientation complète.
+// Haut de l'écran quand on le tient à plat, dos du téléphone quand on le relève : pas de saut quand on
+// le redresse presque à la verticale (l'angle alpha seul y devient instable et peut basculer d'un demi-tour).
+function capTelephone(alpha, beta, gamma) {
+  const r = Math.PI / 180;
+  const ca = Math.cos(alpha * r), sa = Math.sin(alpha * r), cb = Math.cos((beta || 0) * r), sb = Math.sin((beta || 0) * r);
+  const cg = Math.cos((gamma || 0) * r), sg = Math.sin((gamma || 0) * r);
+  const w = Math.max(0, sb);                     // part du dos : 0 à plat, 1 à la verticale
+  const est = -sa * cb - w * (ca * sg + sa * sb * cg);
+  const nord = ca * cb - w * (sa * sg - ca * sb * cg);
+  if (Math.hypot(est, nord) < 0.2) return null;  // écran tourné vers le ciel ou le sol de travers : direction incertaine
+  return (Math.atan2(est, nord) / r + 360) % 360;
+}
 function surOrientation(e) {
   let h = null;
   if (typeof e.webkitCompassHeading === "number" && !isNaN(e.webkitCompassHeading)) h = e.webkitCompassHeading;   // iPhone
-  else if (e.absolute && typeof e.alpha === "number") h = 360 - e.alpha;                                          // Android
+  else if (e.absolute && typeof e.alpha === "number") h = capTelephone(e.alpha, e.beta, e.gamma);                 // Android
   if (h !== null) nouveauCap((h + angleEcran() + 360) % 360, "boussole");
 }
 function ecouterBoussole() {                     // à appeler pendant le toucher sur « Suivre »
@@ -1305,6 +1318,20 @@ function rendreCap() {
   majFleche();
 }
 // Flèche ou point bleu ; aiguille de la boussole tournée vers le nord de la carte
+// Angles « déroulés » : la flèche et l'aiguille tournent toujours par le plus court chemin.
+// Sans cela, en passant par le nord (359° puis 1°), l'animation leur faisait faire un tour complet.
+const affiche = new WeakMap();                   // élément -> dernier angle affiché
+function tourner(el, angle) {
+  const avant = affiche.get(el);
+  const a = avant === undefined ? angle : avant + ecartAngle(angle, avant);
+  if (avant === undefined) {                     // nouvel élément : on le pose sans animation
+    el.style.transition = "none";
+    el.style.transform = `rotate(${a.toFixed(1)}deg)`;
+    void el.getBoundingClientRect();
+    el.style.transition = "";
+  } else el.style.transform = `rotate(${a.toFixed(1)}deg)`;
+  affiche.set(el, a);
+}
 function majFleche() {
   if (!marqueurMoi) return;
   const avecCap = suiviId !== null && cap !== null;
@@ -1313,14 +1340,14 @@ function majFleche() {
   const relevement = rotationPossible ? carte.getBearing() : 0;
   if (avecCap) {
     const svg = marqueurMoi.getElement() && marqueurMoi.getElement().querySelector("svg");
-    if (svg) svg.style.transform = `rotate(${Math.round((cap + relevement) % 360)}deg)`;
+    if (svg) tourner(svg, (cap + relevement) % 360);
   }
   boutonBoussole.hidden = !avecCap || !rotationPossible;
   boutonBoussole.classList.toggle("orientee", carteOrientee);
   boutonBoussole.setAttribute("aria-pressed", carteOrientee);
   boutonBoussole.title = carteOrientee ? "Carte orientée dans votre direction (toucher : nord en haut)"
     : "Nord en haut (toucher : carte orientée dans votre direction)";
-  boutonBoussole.querySelector("svg").style.transform = `rotate(${Math.round(relevement)}deg)`;
+  tourner(boutonBoussole.querySelector("svg"), relevement);
 }
 boutonBoussole.onclick = () => {
   carteOrientee = !carteOrientee;
