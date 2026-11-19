@@ -22,10 +22,17 @@
     position: fixed; z-index: 1000; top: 16px; left: 16px; width: 340px; max-height: calc(100% - 32px);
     overflow: auto; background: var(--creme); border-radius: 14px; box-shadow: 0 6px 24px rgba(0,0,0,.18);
   }
-  .tete { background: var(--foret); color: #fff; padding: 14px 16px 12px; border-radius: 14px 14px 0 0; display: flex; align-items: center; gap: 10px; }
+  /* L'en-tête reste en haut du panneau quand on fait défiler : le bouton « Masquer » ne disparaît jamais */
+  .tete { position: sticky; top: 0; z-index: 5; background: var(--foret); color: #fff; padding: 14px 16px 12px; border-radius: 14px 14px 0 0; display: flex; align-items: center; gap: 10px; }
   .tete h1 { font-family: Fraunces, Georgia, serif; font-weight: 600; font-size: 22px; margin: 0; letter-spacing: .2px; }
   .tete p { margin: 2px 0 0; font-size: 12.5px; opacity: .85; }
-  .tete .plier { margin-left: auto; background: none; border: 1px solid rgba(255,255,255,.35); color: #fff; border-radius: 8px; padding: 4px 9px; font-size: 13px; cursor: pointer; display: none; }
+  .tete .plier { margin-left: auto; background: none; border: 1px solid rgba(255,255,255,.35); color: #fff; border-radius: 8px; padding: 6px 12px; font-size: 14px; cursor: pointer; flex: none; }
+  /* Panneau masqué : il ne reste qu'une barre « 🍄 Toads · Afficher » */
+  .panneau.plie { width: auto; overflow: hidden; background: var(--foret); }
+  .panneau.plie .corps, .panneau.plie .tete p { display: none; }
+  .panneau.plie .tete { padding: 8px 10px 8px 14px; border-radius: 14px; cursor: pointer; }
+  .panneau.plie .tete h1 { font-size: 19px; }
+  #carnet { scroll-margin-top: 76px; }
   .corps { padding: 14px 16px 16px; }
   .recherche { position: relative; margin-bottom: 14px; }
   .recherche input { width: 100%; box-sizing: border-box; border: 1px solid var(--ligne); border-radius: 10px; padding: 9px 12px; font-size: 16px; background: #fff; color: var(--encre); }
@@ -156,10 +163,11 @@
   .leaflet-popup-content { font-size: 13.5px; line-height: 1.5; }
   .leaflet-popup-content a { color: var(--mousse); font-weight: 600; }
   @media (max-width: 640px) {
-    .panneau { top: auto; bottom: 0; left: 0; width: 100%; max-height: 62%; border-radius: 16px 16px 0 0; }
-    .tete { border-radius: 16px 16px 0 0; padding-top: 12px; }
-    .tete .plier { display: inline-block; }
-    .panneau.plie .corps { display: none; }
+    .panneau { top: auto; bottom: 0; left: 0; width: 100%; max-height: 62%; border-radius: 16px 16px 0 0; padding-bottom: env(safe-area-inset-bottom); }
+    .tete { border-radius: 16px 16px 0 0; padding: 10px 16px; }
+    .tete p { display: none; }                  /* sur téléphone, la place va à la carte */
+    .panneau.plie { width: 100%; }
+    .panneau.plie .tete { border-radius: 16px 16px 0 0; padding: 8px 16px; }
     .gps { bottom: auto; top: 12px; right: auto; left: 12px; }
     .suivi-info { right: auto; bottom: auto; left: 12px; top: 60px; max-width: calc(100vw - 84px); }
   }
@@ -648,11 +656,21 @@ function afficher() {
 
 document.getElementById("mode-jour").onclick = () => { mode = "jour"; enregistrer(); afficher(); };
 document.getElementById("mode-potentiel").onclick = () => { mode = "potentiel"; enregistrer(); afficher(); };
-document.getElementById("plier").onclick = () => {
+document.getElementById("plier").onclick = (ev) => {
+  ev.stopPropagation();
   const p = document.getElementById("panneau"), plie = p.classList.toggle("plie");
   document.getElementById("plier").textContent = plie ? "Afficher" : "Masquer";
   document.getElementById("plier").setAttribute("aria-expanded", !plie);
 };
+// Panneau masqué : toucher la barre n'importe où le rouvre
+document.querySelector(".tete").onclick = () => { if (document.getElementById("panneau").classList.contains("plie")) document.getElementById("plier").click(); };
+// Le panneau cache une bonne part de la carte sur téléphone (y compris en paysage ou en « version pour ordinateur »)
+// et dans les fenêtres étroites : il se replie alors de lui-même quand on part vers la carte.
+const ecranTactile = !!(window.matchMedia && matchMedia("(pointer: coarse)").matches);
+const panneauGenant = () => window.innerWidth <= 640 || (ecranTactile && window.innerWidth <= 1100);
+function plierPanneau(plier) {
+  if (document.getElementById("panneau").classList.contains("plie") !== plier) document.getElementById("plier").click();
+}
 
 // ---- Meilleurs coins autour de moi ----
 const NB_COINS = 10;
@@ -780,7 +798,7 @@ async function afficherTop() {
       icon: L.divIcon({ className: "coin", html: `<span style="background:${couleurScore(c.s)}">★</span>`, iconSize: [30, 30], iconAnchor: [15, 15] }) })
       .bindPopup(`<b>${titre(jours[n])} : coin n° ${+b.dataset.i + 1} ${contour ? "du Bas-Rhin" : "de la carte"}</b><br>Score ${c.s}/1000${c.nom ? " · " + sur(c.nom) : ""}` +
         (info.acces ? `<br>${STATUTS_FORET[c.st]}` : "") + `<br><a href="${lien}" target="_blank" rel="noopener">Itinéraire</a>`).addTo(groupeTop);
-    if (window.innerWidth <= 640 && !document.getElementById("panneau").classList.contains("plie")) document.getElementById("plier").click();
+    if (panneauGenant()) plierPanneau(true);
     carte.setView(m.getLatLng(), Math.max(carte.getZoom(), 14));
     m.openPopup();
   });
@@ -837,7 +855,7 @@ async function chercherAutour(ajuster) {
     (info.acces ? `<span class="statut-coin">${STATUTS_FORET[c.st]}</span>` : "") + `</span></button></li>`).join("")}</ol>`;
   zone.querySelectorAll("button").forEach((b) => b.onclick = () => {
     const m = marqueurs[+b.dataset.i];
-    if (window.innerWidth <= 640 && !document.getElementById("panneau").classList.contains("plie")) document.getElementById("plier").click();
+    if (panneauGenant()) plierPanneau(true);
     carte.setView(m.getLatLng(), Math.max(carte.getZoom(), 14));
     m.openPopup();
   });
@@ -1114,8 +1132,7 @@ function nomNote(n) { return n.nom || (info && info.especes[n.espece] ? info.esp
 function finAttente() { noteEnAttente = null; document.getElementById("bandeau").hidden = true; }
 document.getElementById("bandeau-annuler").onclick = finAttente;
 function deplierPanneau(ouvert) {
-  const plie = document.getElementById("panneau").classList.contains("plie");
-  if (window.innerWidth <= 640 && plie === ouvert) document.getElementById("plier").click();
+  if (ouvert || panneauGenant()) plierPanneau(!ouvert);
 }
 // Formulaire d'ajout : n'importe quel champignon, à ma position ou à un endroit touché sur la carte
 function ouvrirFormulaire(ll) {
@@ -1253,7 +1270,7 @@ function demarrerSuivi() {
   infoSuivi.innerHTML = "🍄 Recherche de votre position…";
   suiviId = surveillerPosition();
   if (marqueurMoi && marqueurMoi.dragging) marqueurMoi.dragging.disable();
-  if (window.innerWidth <= 640 && !document.getElementById("panneau").classList.contains("plie")) document.getElementById("plier").click();
+  plierPanneau(true);                         // en marchant, toute la place pour la carte ; « Afficher » le rouvre
   majBoutonsSuivi();
 }
 function arreterSuivi() {
