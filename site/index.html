@@ -160,6 +160,12 @@
   .coin span { width: 26px; height: 26px; border: 2px solid #fff; box-shadow: 0 1px 5px rgba(0,0,0,.4); }
   .moi span { display: block; width: 18px; height: 18px; border-radius: 50%; background: #2a6fdb; border: 3px solid #fff;
     box-shadow: 0 0 0 3px rgba(42,111,219,.3), 0 1px 4px rgba(0,0,0,.3); cursor: grab; }
+  /* En suivi avec une direction connue : flèche qui pointe là où vous allez */
+  .moi-fleche svg { display: block; filter: drop-shadow(0 1px 3px rgba(0,0,0,.45)); transition: transform .15s linear; }
+  .localiser.boussole { padding: 0; width: 42px; height: 42px; display: inline-flex; align-items: center; justify-content: center; }
+  .localiser.boussole[hidden] { display: none; }
+  .localiser.boussole svg { transition: transform .15s linear; }
+  .localiser.boussole.orientee { box-shadow: 0 0 0 3px var(--mousse), 0 3px 12px rgba(0,0,0,.2); }
   .leaflet-popup-content { font-size: 13.5px; line-height: 1.5; }
   .leaflet-popup-content a { color: var(--mousse); font-weight: 600; }
   @media (max-width: 640px) {
@@ -267,11 +273,16 @@
   <button class="localiser" id="localiser">📍 Me localiser</button>
   <button class="localiser" id="suivre" aria-pressed="false" title="Suivre ma position en marchant : les meilleurs coins à moins de 5 km, avec leur score">🚶 Suivre</button>
   <button class="localiser" id="recentrer" hidden>⌖ Recentrer</button>
+  <button class="localiser boussole" id="boussole" hidden aria-pressed="true" title="Carte orientée dans votre direction (toucher : nord en haut)">
+    <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M12 2 L15.5 12 L8.5 12 Z" fill="#d23c2a"/><path d="M12 22 L8.5 12 L15.5 12 Z" fill="#9aa3ab"/><text x="12" y="10.4" font-size="5.5" font-weight="700" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif">N</text></svg>
+  </button>
 </div>
 <div class="suivi-info" id="suivi-info" hidden aria-live="polite"></div>
 <div class="bandeau" id="bandeau" hidden><span>Touchez la carte à l'endroit exact</span><button id="bandeau-annuler">Annuler</button></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- Rotation de la carte (suivi orienté dans votre direction) -->
+<script src="https://unpkg.com/leaflet-rotate@0.2.8/dist/leaflet-rotate.js"></script>
 <script>
 const FICHES = {
   cepe: { latin: "Boletus edulis, B. reticulatus, B. aereus, B. pinophilus", periode: "mai à novembre selon l'espèce",
@@ -341,7 +352,9 @@ const FICHES = {
 };
 const COULEURS = { "bon moment": "var(--bon)", "conditions moyennes": "var(--moyen)", "peu probable en ce moment": "var(--faible)", "hors saison": "var(--hors)" };
 
-const carte = L.map("carte", { zoomControl: false }).setView([48.45, 6.6], 8);
+// rotate : la carte peut tourner (seulement en suivi, avec la direction du téléphone) ; pas de rotation à deux doigts
+const carte = L.map("carte", { zoomControl: false, rotate: true, bearing: 0, rotateControl: false, touchRotate: false, shiftKeyRotate: false })
+  .setView([48.45, 6.6], 8);
 L.control.zoom({ position: "topright" }).addTo(carte);
 const wmts = (couche, format) => "https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=" + couche +
   "&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=" + format;
@@ -712,8 +725,7 @@ const km = (d) => d < 1 ? `${Math.round(d * 1000)} m` : `${d.toLocaleString("fr-
 function placerCentre(latlng, ajuster) {
   centre = latlng;
   if (!marqueurMoi) {
-    marqueurMoi = L.marker(latlng, { draggable: true, zIndexOffset: 1000, title: "Votre position (déplaçable)",
-      icon: L.divIcon({ className: "moi", html: "<span></span>", iconSize: [24, 24], iconAnchor: [12, 12] }) }).addTo(carte);
+    marqueurMoi = L.marker(latlng, { draggable: true, zIndexOffset: 1000, title: "Votre position (déplaçable)", icon: ICONE_POINT }).addTo(carte);
     marqueurMoi.on("dragend", () => placerCentre(marqueurMoi.getLatLng(), false));
   } else {
     marqueurMoi.setLatLng(latlng);
@@ -1234,6 +1246,95 @@ const RAYON_SUIVI = 5, PAS_RECHERCHE_KM = 0.1;
 const boutonSuivre = document.getElementById("suivre"), boutonRecentrer = document.getElementById("recentrer");
 const boutonLocaliser = document.getElementById("localiser"), infoSuivi = document.getElementById("suivi-info");
 
+// ---- Direction : flèche et carte orientée, comme dans une appli de navigation ----
+// Cap (degrés depuis le nord, sens horaire) donné par la boussole du téléphone ; à défaut, par le GPS quand on marche.
+// Carte orientée : votre direction est en haut. Le bouton boussole remet le nord en haut (et inversement).
+// Si vous déplacez la carte à la main, elle cesse de tourner jusqu'à « Recentrer ».
+const boutonBoussole = document.getElementById("boussole");
+const rotationPossible = typeof carte.setBearing === "function";
+let cap = null, capSource = null, dernierCapBoussole = 0, carteOrientee = true, evtBoussole = null;
+let dernierRendu = 0, renduPrevu = false;
+const ICONE_POINT = L.divIcon({ className: "moi", html: "<span></span>", iconSize: [24, 24], iconAnchor: [12, 12] });
+const ICONE_FLECHE = L.divIcon({ className: "moi-fleche", iconSize: [40, 40], iconAnchor: [20, 20],
+  html: '<svg viewBox="0 0 40 40" width="40" height="40"><path d="M20 3 L33 35 L20 28 L7 35 Z" fill="#2a6fdb" stroke="#fff" stroke-width="3" stroke-linejoin="round"/></svg>' });
+const ecartAngle = (a, b) => ((a - b + 540) % 360) - 180;          // de b vers a, entre -180 et 180
+function angleEcran() {                                          // écran tourné (paysage) : 90, 180 ou 270
+  if (screen.orientation && typeof screen.orientation.angle === "number") return screen.orientation.angle;
+  return typeof window.orientation === "number" ? window.orientation : 0;
+}
+function nouveauCap(h, source) {
+  if (source === "gps" && Date.now() - dernierCapBoussole < 3000) return;   // la boussole prime sur le GPS
+  // Lissage : la boussole tremble un peu ; le cap GPS ne vient que toutes les secondes environ
+  cap = cap === null ? h : (cap + ecartAngle(h, cap) * (source === "boussole" ? 0.2 : 0.6) + 360) % 360;
+  capSource = source;
+  if (source === "boussole") dernierCapBoussole = Date.now();
+  demanderRendu();
+}
+function surOrientation(e) {
+  let h = null;
+  if (typeof e.webkitCompassHeading === "number" && !isNaN(e.webkitCompassHeading)) h = e.webkitCompassHeading;   // iPhone
+  else if (e.absolute && typeof e.alpha === "number") h = 360 - e.alpha;                                          // Android
+  if (h !== null) nouveauCap((h + angleEcran() + 360) % 360, "boussole");
+}
+function ecouterBoussole() {                     // à appeler pendant le toucher sur « Suivre »
+  if (evtBoussole || typeof DeviceOrientationEvent === "undefined") return;
+  // Android : orientation par rapport au nord ; iPhone : orientation simple, avec le cap de la boussole en plus
+  evtBoussole = "ondeviceorientationabsolute" in window ? "deviceorientationabsolute" : "deviceorientation";
+  window.addEventListener(evtBoussole, surOrientation);
+  // iPhone (et certains navigateurs) : la boussole ne répond qu'après autorisation, demandée pendant le toucher
+  if (typeof DeviceOrientationEvent.requestPermission === "function") DeviceOrientationEvent.requestPermission().catch(() => {});
+}
+function couperBoussole() {
+  if (evtBoussole) window.removeEventListener(evtBoussole, surOrientation);
+  evtBoussole = null;
+}
+function demanderRendu() {
+  if (renduPrevu) return;
+  renduPrevu = true;
+  // au plus 8 rotations par seconde : la carte reste fluide et le téléphone ne chauffe pas
+  setTimeout(() => requestAnimationFrame(rendreCap), Math.max(0, 125 - (Date.now() - dernierRendu)));
+}
+function rendreCap() {
+  renduPrevu = false;
+  dernierRendu = Date.now();
+  if (suiviId === null || cap === null) return;
+  if (rotationPossible && carteOrientee && suiviCentre) {
+    const cible = (360 - cap) % 360;
+    if (Math.abs(ecartAngle(cible, carte.getBearing())) >= 1.5) carte.setBearing(cible);
+  }
+  majFleche();
+}
+// Flèche ou point bleu ; aiguille de la boussole tournée vers le nord de la carte
+function majFleche() {
+  if (!marqueurMoi) return;
+  const avecCap = suiviId !== null && cap !== null;
+  const icone = avecCap ? ICONE_FLECHE : ICONE_POINT;
+  if (marqueurMoi.options.icon !== icone) marqueurMoi.setIcon(icone);
+  const relevement = rotationPossible ? carte.getBearing() : 0;
+  if (avecCap) {
+    const svg = marqueurMoi.getElement() && marqueurMoi.getElement().querySelector("svg");
+    if (svg) svg.style.transform = `rotate(${Math.round((cap + relevement) % 360)}deg)`;
+  }
+  boutonBoussole.hidden = !avecCap || !rotationPossible;
+  boutonBoussole.classList.toggle("orientee", carteOrientee);
+  boutonBoussole.setAttribute("aria-pressed", carteOrientee);
+  boutonBoussole.title = carteOrientee ? "Carte orientée dans votre direction (toucher : nord en haut)"
+    : "Nord en haut (toucher : carte orientée dans votre direction)";
+  boutonBoussole.querySelector("svg").style.transform = `rotate(${Math.round(relevement)}deg)`;
+}
+boutonBoussole.onclick = () => {
+  carteOrientee = !carteOrientee;
+  if (!carteOrientee) carte.setBearing(0);
+  else {                                         // retour à la carte orientée : on se recentre aussi sur vous
+    suiviCentre = true;
+    majBoutonsSuivi();
+    if (dernierePosition) carte.panTo(dernierePosition.ll);
+  }
+  majFleche();
+  demanderRendu();
+};
+if (rotationPossible) carte.on("rotate", () => { if (suiviId !== null) majFleche(); });
+
 function majBoutonsSuivi() {
   const actif = suiviId !== null;
   boutonSuivre.textContent = actif ? "⏹ Arrêter" : "🚶 Suivre";
@@ -1268,7 +1369,9 @@ function demarrerSuivi() {
   rayon = RAYON_SUIVI; curseur.value = rayon; texteRayon.textContent = rayon + " km";
   suiviCentre = true; dernierPoint = null; dernierePosition = null;
   infoSuivi.innerHTML = "🍄 Recherche de votre position…";
+  cap = null; capSource = null; carteOrientee = true;
   suiviId = surveillerPosition();
+  ecouterBoussole();
   if (marqueurMoi && marqueurMoi.dragging) marqueurMoi.dragging.disable();
   plierPanneau(true);                         // en marchant, toute la place pour la carte ; « Afficher » le rouvre
   majBoutonsSuivi();
@@ -1277,6 +1380,10 @@ function arreterSuivi() {
   if (suiviId === null) return;
   navigator.geolocation.clearWatch(suiviId);
   suiviId = null;
+  couperBoussole();
+  cap = null; capSource = null;
+  if (rotationPossible) carte.setBearing(0);  // le nord revient en haut
+  majFleche();
   if (cercleGps) { carte.removeLayer(cercleGps); cercleGps = null; }
   if (marqueurMoi && marqueurMoi.dragging) marqueurMoi.dragging.enable();
   if (rayonAvantSuivi !== null) {
@@ -1291,6 +1398,9 @@ function positionSuivie(pos) {
   const ll = L.latLng(pos.coords.latitude, pos.coords.longitude), prec = Math.round(pos.coords.accuracy || 0);
   const premier = !dernierPoint;
   dernierePosition = { ll, prec };
+  // Sans boussole : le sens de la marche, dès qu'on avance (plus de 2,5 km/h)
+  const hGps = pos.coords.heading, vit = pos.coords.speed;
+  if (typeof hGps === "number" && !isNaN(hGps) && typeof vit === "number" && vit > 0.7) nouveauCap(hGps, "gps");
   // Cercle bleu clair : la précision de la position (souvent moins bonne sous les arbres)
   if (!cercleGps) cercleGps = L.circle(ll, { radius: prec, color: "#2a6fdb", weight: 1, fillColor: "#2a6fdb", fillOpacity: .1, interactive: false }).addTo(carte);
   else { cercleGps.setLatLng(ll); cercleGps.setRadius(prec); }
@@ -1305,6 +1415,7 @@ function positionSuivie(pos) {
     majInfoSuivi();
   }
   if (!premier && suiviCentre) carte.panTo(ll);
+  majFleche();
 }
 function erreurSuivi(e) {
   if (e.code === 1) {                         // localisation refusée
@@ -1319,6 +1430,7 @@ boutonRecentrer.onclick = () => {
   suiviCentre = true;
   majBoutonsSuivi();
   if (dernierePosition) carte.panTo(dernierePosition.ll);
+  demanderRendu();                            // la carte se remet à tourner avec vous
 };
 carte.on("dragstart", () => { if (suiviId !== null && suiviCentre) { suiviCentre = false; majBoutonsSuivi(); } });
 // Certains téléphones coupent le suivi quand l'écran s'éteint : on le relance au retour sur la page
