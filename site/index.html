@@ -1262,8 +1262,21 @@ function angleEcran() {                                          // écran tourn
   if (screen.orientation && typeof screen.orientation.angle === "number") return screen.orientation.angle;
   return typeof window.orientation === "number" ? window.orientation : 0;
 }
+// En voiture ou à vélo, la boussole du téléphone est faussée (carrosserie, support aimanté, haut-parleurs) :
+// comme Waze ou Maps, on prend alors le cap du GPS, et on le garde aux feux rouges et dans les bouchons.
+// À pied (ou arrêté depuis plus d'1 min 30), la boussole reprend la main : elle montre où l'on regarde.
+const VITESSE_ROULER = 2.5;                      // m/s, environ 9 km/h
+const DUREE_ROULER = 90000;                      // ms
+let dernierRapide = 0, dernierFix = null;
+const enRoulant = () => Date.now() - dernierRapide < DUREE_ROULER;
+function relevementEntre(a, b) {                 // direction de a vers b, en degrés depuis le nord
+  const r = Math.PI / 180, f1 = a.lat * r, f2 = b.lat * r, dl = (b.lng - a.lng) * r;
+  const y = Math.sin(dl) * Math.cos(f2), x = Math.cos(f1) * Math.sin(f2) - Math.sin(f1) * Math.cos(f2) * Math.cos(dl);
+  return (Math.atan2(y, x) / r + 360) % 360;
+}
 function nouveauCap(h, source) {
-  if (source === "gps" && Date.now() - dernierCapBoussole < 3000) return;   // la boussole prime sur le GPS
+  if (source === "boussole" && enRoulant()) return;                                   // en roulant : GPS seulement
+  if (source === "gps" && !enRoulant() && Date.now() - dernierCapBoussole < 3000) return;   // à pied : la boussole prime
   // Lissage : la boussole tremble un peu ; le cap GPS ne vient que toutes les secondes environ
   cap = cap === null ? h : (cap + ecartAngle(h, cap) * (source === "boussole" ? 0.2 : 0.6) + 360) % 360;
   capSource = source;
@@ -1284,6 +1297,8 @@ function capTelephone(alpha, beta, gamma) {
   return (Math.atan2(est, nord) / r + 360) % 360;
 }
 function surOrientation(e) {
+  // iPhone : boussole pas encore calibrée ou très imprécise (plus de 45°) : on l'ignore
+  if (typeof e.webkitCompassAccuracy === "number" && (e.webkitCompassAccuracy < 0 || e.webkitCompassAccuracy > 45)) return;
   let h = null;
   if (typeof e.webkitCompassHeading === "number" && !isNaN(e.webkitCompassHeading)) h = e.webkitCompassHeading;   // iPhone
   else if (e.absolute && typeof e.alpha === "number") h = capTelephone(e.alpha, e.beta, e.gamma);                 // Android
@@ -1385,7 +1400,7 @@ function majInfoSuivi() {
   infoSuivi.innerHTML = "🍄 " + t;
 }
 function surveillerPosition() {
-  return navigator.geolocation.watchPosition(positionSuivie, erreurSuivi, { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 });
+  return navigator.geolocation.watchPosition(positionSuivie, erreurSuivi, { enableHighAccuracy: true, maximumAge: 1000, timeout: 30000 });
 }
 function demarrerSuivi() {
   if (!navigator.geolocation) {
@@ -1396,7 +1411,7 @@ function demarrerSuivi() {
   rayon = RAYON_SUIVI; curseur.value = rayon; texteRayon.textContent = rayon + " km";
   suiviCentre = true; dernierPoint = null; dernierePosition = null;
   infoSuivi.innerHTML = "🍄 Recherche de votre position…";
-  cap = null; capSource = null; carteOrientee = true;
+  cap = null; capSource = null; carteOrientee = true; dernierRapide = 0; dernierFix = null;
   suiviId = surveillerPosition();
   ecouterBoussole();
   if (marqueurMoi && marqueurMoi.dragging) marqueurMoi.dragging.disable();
@@ -1425,9 +1440,19 @@ function positionSuivie(pos) {
   const ll = L.latLng(pos.coords.latitude, pos.coords.longitude), prec = Math.round(pos.coords.accuracy || 0);
   const premier = !dernierPoint;
   dernierePosition = { ll, prec };
-  // Sans boussole : le sens de la marche, dès qu'on avance (plus de 2,5 km/h)
-  const hGps = pos.coords.heading, vit = pos.coords.speed;
-  if (typeof hGps === "number" && !isNaN(hGps) && typeof vit === "number" && vit > 0.7) nouveauCap(hGps, "gps");
+  // Cap et vitesse du GPS ; s'il ne les donne pas, on les déduit du chemin parcouru (au moins 15 m)
+  const t = pos.timestamp || Date.now();
+  let hGps = pos.coords.heading, vit = pos.coords.speed;
+  if (dernierFix) {
+    const d = dernierFix.ll.distanceTo(ll), dt = (t - dernierFix.t) / 1000;
+    if (!(typeof vit === "number" && !isNaN(vit)) && dt > 0) vit = d / dt;
+    if (!(typeof hGps === "number" && !isNaN(hGps)) && d >= 15 && prec <= 30) hGps = relevementEntre(dernierFix.ll, ll);
+  }
+  if (!dernierFix || dernierFix.ll.distanceTo(ll) >= 15 || t - dernierFix.t > 20000) dernierFix = { ll, t };
+  const capValide = typeof hGps === "number" && !isNaN(hGps);
+  if (capValide && vit > VITESSE_ROULER) dernierRapide = Date.now();
+  // Sans boussole (ou en roulant) : le sens du déplacement, dès qu'on avance (plus de 2,5 km/h)
+  if (capValide && vit > 0.7) nouveauCap(hGps, "gps");
   // Cercle bleu clair : la précision de la position (souvent moins bonne sous les arbres)
   if (!cercleGps) cercleGps = L.circle(ll, { radius: prec, color: "#2a6fdb", weight: 1, fillColor: "#2a6fdb", fillOpacity: .1, interactive: false }).addTo(carte);
   else { cercleGps.setLatLng(ll); cercleGps.setRadius(prec); }
